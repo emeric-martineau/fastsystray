@@ -3,7 +3,7 @@
  *
  * Fast SysTray - Module Exécuter.
  *
- * Version 1.0.0
+ * Version 1.1.0
  *
  * Le module Exécuter reprand les mêmes fonctionnalités que la boit de dialogue
  * Exécuter de Windows mais étend son fonctionnement avec la possibilité de ne
@@ -56,6 +56,7 @@ type
     procedure OKClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
   private
+    CloseWindowsAfterRun : Boolean ; 
     { Déclarations privées }
     function  StrCopyN(chaine : String; valMax : Integer) : String ;
     function  StrCopyToN(chaine : String; startPos : Integer) : String ;
@@ -67,10 +68,38 @@ type
 
 var
   Form_fst_run: TForm_fst_run;
-
+  Function  IsPrevInstance : HWND ;
+  
 implementation
 
 {$R *.DFM}
+
+{*******************************************************************************
+ * cette fonction renvoie 0 s'il n'y a pas d'instance du même programme déjà
+ * lancée sinon le handle de l'instance déjà lancée c'est à dire une valeur <>0
+ * cette fonction est appelé dans le source du projet. voir ce source pour
+ * comprendre.
+ ******************************************************************************}
+Function IsPrevInstance : HWND ;
+Var ClassName:Array[0..255] of char;
+    TitreApplication:string;
+Begin
+    result := 0 ;
+    TitreApplication := Application.Title ;
+    { on change le titre car sinon, on trouverait toujours une application déjà
+      lancée (la notre!) }
+    Application.Title := '' ;
+    try
+        { met dans ClassName le nom de la class de l'application }
+        GetClassName(Application.handle, ClassName, 254) ;
+        { renvoie le Handle de la première fenêtre de Class (type) ClassName et
+          de titre TitreApplication (0 s'il n'y en a pas) }
+        result := FindWindow(ClassName,PChar(TitreApplication)) ;
+    finally
+        { restauration du vrai titre }
+        Application.Title := TitreApplication ;
+    end;
+end;
 
 {*******************************************************************************
  * Bouton Annuler
@@ -102,7 +131,12 @@ Var Registre : TRegistry ;
     i : Integer ;
     NbMRUList : Integer ;
     tmp : String ;
+    Rectangle : TRect ;
 begin
+  { Utilisation de SystemParametersInfo pour récupérer la surface (rectangle) de
+    travail de l'écran disponible }
+  SystemParametersInfo (SPI_GETWORKAREA,0,@Rectangle,0);
+
     Registre := TRegistry.Create;
 
     try
@@ -136,9 +170,62 @@ begin
             Registre.CloseKey;
         end ;
     finally
-        Registre.Free;
     end;
 
+    { Fermer la fenêtre après exécution }
+    try
+        Registre.CloseKey ;
+        Registre.OpenKey('Software\Fast SysTray', True) ;
+
+        { Fermer la fenêtre executer }
+        if Registre.ValueExists('MenuFermerFenetreExec')
+        then
+            CloseWindowsAfterRun := Registre.ReadBool('MenuFermerFenetreExec')
+        else begin
+            CloseWindowsAfterRun := True ;
+        end ;
+
+        Registre.CloseKey ;
+    finally
+    end ;
+
+    try
+        Registre.CloseKey ;
+        Registre.OpenKey('Software\Fast SysTray', True) ;
+
+        { Fermer la fenêtre executer }
+        if Registre.ValueExists('PositionFenetreExec')
+        then begin
+            case Registre.ReadInteger('PositionFenetreExec') of
+                0 : begin //en haut à gauche
+                        Left := Rectangle.Left ;
+                        Top := Rectangle.Top ;
+                    end ;
+                1 : begin //en bas à gauche
+                        Left := Rectangle.Left ;
+                        Top := Rectangle.Bottom - Height ;
+                    end ;
+                2 : begin //en haut à droite
+                        Left := Rectangle.Right - Width ;
+                        Top := Rectangle.Top ;
+                    end ;
+                3 : begin //en bas à droite
+                        Left := Rectangle.Right - Width ;
+                        Top := Rectangle.Bottom - Height ;
+                    end ;
+                4 : Position := poDesktopCenter ; //au milieu du bureau  (poDesktopCenter)
+                5 : Position := poScreenCenter ; //au milieu de l'écran (poScreenCenter)
+                6 : Position := poDefaultPosOnly ; //laisser Windows positionner la fenêtre (poDefaultPosOnly)
+
+            end ;
+        end ;
+
+        Registre.CloseKey ;
+    finally
+        Registre.Free ;
+    end ;
+
+    { Désactive le bouton OK }
     if Length(ComboBox1.Text) <= 0
     then
         OK.Enabled := False ;
@@ -228,6 +315,7 @@ begin
 
             ComboBox1.Items.Clear ;
             ComboBox1.Text := '' ;
+            Ok.Enabled := False ;
         finally
             Registre.CloseKey;
             Registre.Free;
@@ -279,6 +367,10 @@ begin
             ComboBox1.Items.Move(ComboBox1.ItemIndex, 0) ;
             ComboBox1.ItemIndex := 0 ;
         end ;
+
+        if CloseWindowsAfterRun
+        then
+            Close ;
     end ;
 
 end;
@@ -291,6 +383,8 @@ Var Separateur : String ;
     i : Integer ;
     Pos : Integer ;
 Begin
+    Pos := -1 ;
+
     if (ligne[1] = '"') or (ligne[1] = '''')
     then
         Separateur := ligne[1]
@@ -305,6 +399,10 @@ Begin
              break ;
         end ;
 
+    if Pos = -1
+    then
+        Pos := length(ligne) +1 ;
+            
     { Copie la commande }
     commande := StrCopyN(ligne, Pos - 1) ;
 
@@ -316,7 +414,9 @@ Begin
         Pos := Pos + 1 ;
     end ;
 
-    arguments := StrCopyToN(ligne, Pos + 1) ;
+    if Pos = -1
+    then
+        arguments := StrCopyToN(ligne, Pos + 1) ;
 end ;
 
 {*******************************************************************************
@@ -363,7 +463,10 @@ begin
         SE_ERR_ACCESSDENIED  : msg := 'L''accès au fichier est refusé.' ;
         SE_ERR_ASSOCINCOMPLETE : msg := 'Le programme associé est invalide.' ;
         SE_ERR_DLLNOTFOUND   : msg := 'DLL introuvable pour le programme.' ;
-        SE_ERR_NOASSOC       : msg := 'Aucun programme n''est associer à l''extention ' + '(' + ExtractFileExt(msg) + ')' ;
+        SE_ERR_NOASSOC       : begin
+                                   ShellExecute(0, 'open', 'rundll32.exe', PChar('shell32.dll,OpenAs_RunDLL ' + commande), Pchar(commande), SW_SHOWNORMAL) ;
+                                   msg := '' ;
+                               end ;
         SE_ERR_OOM           : msg := 'Pas assez de mémoire pour appeler le programme' ;
         SE_ERR_SHARE         : msg := 'Violation de partage' ;
     else

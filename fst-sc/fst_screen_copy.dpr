@@ -1,15 +1,16 @@
-program fst_run;
+program fst_screen_copy;
 
 uses
   Forms, Windows,
-  run in 'run.pas' {Form_fst_run};
+  fst_sc in 'fst_sc.pas' {Form1};
 
 {$R *.RES}
+
 Var Fenetre : HWND ;
 
 begin
   Application.Initialize;
-  Application.Title := 'Exécuter (Fast SysTray)';
+  Application.Title := 'Fast SysTray - Copie d''écran';
 
   Fenetre := IsPrevinstance ;
 
@@ -21,7 +22,7 @@ begin
       Application.Terminate ;
   end
   else begin
-    Application.CreateForm(TForm_fst_run, Form_fst_run);
+    Application.CreateForm(TForm1, Form1);
     Application.Run;
   end ;
 end.

@@ -3,7 +3,7 @@
  *
  * Fast SysTray
  *
- * Version 1.0.0
+ * Version 1.1.0
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software
@@ -18,9 +18,27 @@
  * this program; if not, write to the Free Software Foundation, Inc., 59 Temple
  * Place, Suite 330, Boston, MA 02111-1307 USA
  *
- ******************************************************************************}
-
-{*******************************************************************************
+ *******************************************************************************
+ *******************************************************************************
+ *
+ * Version 1.0 : version initiale
+ *
+ * Version 1.1 :
+ *              - correction d'un bug qui enregistrait la liste de raccourci
+ *                lorsqu'on cliquait sur Annuler,
+ *              - amélioration de la boite Exécuté : on peut spécifier sa position
+ *                au démarrage, ne se lance qu'une fois, permet de lui dire de
+ *                se fermer quand on lance la commande,
+ *              - amélioration des raccourcis. Lorsqu'on choisi un lien .LNK,
+ *              - suppression du recours à la TDriveListBox,
+ *              - Remplacement de TabSheet pas TabbedNoteBook (plus légé),
+ *              - amélioration de la capture d'écran : programme externe, permet
+ *                de sélectionner ce qu'on veut copier, qu'elle action déclanche
+ *                la copie,
+ *              - suppression du message : "ShortCut0 existe déjà".
+ *
+ *******************************************************************************
+ *******************************************************************************
  * Liste des images pour les menus. Numéro d'index et à quoi elles correspondent
  * ImageList1 :
  *                 0 : quitter,
@@ -34,9 +52,75 @@
  *                 8 : hibernation
  *                 9 : exécuter
  *                10 : capture d'écran
- *                11 : aide
- ******************************************************************************}
-
+ *                11 : Aide
+ *******************************************************************************
+ *******************************************************************************
+ * Registre
+ *
+ * HKEY_LOCAL_MACHINE :
+ * \Software\Microsoft\Windows\CurrentVersion\Run\Fast SysTray (chaine)
+ *  -> lancement au démarrage de la machine
+ *
+ * HKEY_CURRENT_USER :
+ * \Software\Microsoft\Windows\CurrentVersion\Run\Fast SysTray (chaine)
+ *  -> lancement au démarrage de la machine
+ *
+ * \Software\Fast SysTray\MenuArreter (DWORD)
+ * -> 1 : affiche le menu arrêter, 0 : non
+ *
+ * \Software\Fast SysTray\MenuCapturerEcran (DWORD)
+ * -> 1 : affiche le menu Capturer Ecran, 0 : non
+ *
+ * \Software\Fast SysTray\MenuDisques (DWORD)
+ * -> 1 : affiche la liste des lecteurs, 0 : non
+ *
+ * \Software\Fast SysTray\MenuDisquesLabel (DWORD)
+ * -> 1 : affiche les label des disque, 0 : non
+ *
+ * \Software\Fast SysTray\MenuEjecterDisques (DWORD)
+ * -> 1 : affiche le menu Ejecter les disque, 0 : non
+ *
+ * \Software\Fast SysTray\MenuExecuter (DWORD)
+ * -> 1 : affiche le menu Exécuter, 0 : non
+ *
+ * \Software\Fast SysTray\MenuFavoris (DWORD)
+ * -> 1 : affiche le menu Favoris Internet, 0 : non
+ *
+ * \Software\Fast SysTray\MenuFavorisReseau (DWORD)
+ * -> 1 : affiche le menu Favoris réseau, 0 : non
+ *
+ * \Software\Fast SysTray\MenuGraphisme (DWORD)
+ * -> 1 : affiche le menu Utiliser les graphismes, 0 : non
+ *
+ * \Software\Fast SysTray\MenuRentrerDisques (DWORD)
+ * -> 1 : affiche le menu Rentreer Disques, 0 : non
+ *
+ * \Software\Fast SysTray\MenuVeille (DWORD)
+ * -> 1 : affiche le menu Mise en veille/Ecran de veille, 0 : non
+ *
+ * \Software\Fast SysTray\MenuVerrouiller (DWORD)
+ * -> 1 : affiche le menu Verrouiller Session, 0 : non
+ *
+ * \Software\Fast SysTray\MenuFermerFenetreExec (DWORD)
+ * -> 1 : ferme la fenêtre après exécution de la commande, 0 : non
+ *
+ * \Software\Fast SysTray\PositionFenetreExec (DWORD)
+ * -> 0 : en haut à gauche
+ *    1 : en bas à gauche
+ *    2 : en haut à droite
+ *    3 : en bas à droite
+ *    4 : au milieu du bureau  (poDesktopCenter)
+ *    5 : au milieu de l'écran (poScreenCenter)
+ *    6 : laisser Windows positionner la fenêtre (poDefaultPosOnly)
+ *
+ *******************************************************************************
+ *******************************************************************************
+ * BUG résolus
+ *
+ * Bug #1 : quand on clique sur le bouton "Annuler" de la fenêtre préférence
+ *          et la liste de raccourci a été modifiée, enregistre ce menu.
+ *******************************************************************************
+}
 unit main;
 
 interface
@@ -44,27 +128,43 @@ interface
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   StdCtrls, ExtCtrls, Menus, ShellApi, ComCtrls, filectrl, MMSystem, Registry,
-  ComObj, ShlObj, ActiveX, ImgList, XPTheme, BoiteCreerRacourci, Clipbrd;
+  ComObj, ShlObj, ActiveX, ImgList, XPTheme, BoiteCreerRacourci, Clipbrd,
+  Tabnotbk;
 
 const
   TrayIconMessage = WM_USER + 100 ;
   CHEMIN_REGISTRE = 'Software\Fast SysTray' ;
   { Utilise pour ExitWindowsEx pour Windows 2003 }
   SHTDN_REASON_MAJOR_APPLICATION  = $00040000 ;
+  { Message indiquant que le theme sous Winodws XP change }
+  WM_THEMECHANGED = 794 ;  
 
 type
   TForm1 = class(TForm)
     ImageList1: TImageList;
     BoutonEnregistrerConfiguration: TButton;
     BoutonAnnuler: TButton;
-    TabControl1: TTabControl;
-    { GroupeBox de l'onglet Menu}
+    Timer1: TTimer;
+    TabbedNotebook1: TTabbedNotebook;
+    ListBoxRac: TListBox;
+    AjouterRac: TButton;
+    ModifierRac: TButton;
+    SupprimerRac: TButton;
+    ajouterSeparateur: TButton;
+    MonterRac: TButton;
+    DescendreRac: TButton;
+    GroupBoxGeneral1: TGroupBox;
+    LancerAutoOrdi: TCheckBox;
+    LancerAutoUser: TCheckBox;
+    GroupBoxGeneral2: TGroupBox;
+    RaccourciBureau: TCheckBox;
+    RaccourciLacementRapide: TCheckBox;
+    RaccourciDemarrer: TCheckBox;
     GroupBoxMenu1: TGroupBox;
-    GroupBoxMenu2: TGroupBox;
-    { Case à cocher de l'onglet Menu}
     CocheMenuVeille: TCheckBox;
     CocheMenuVerrouiller: TCheckBox;
     CocheMenuArreter: TCheckBox;
+    GroupBoxMenu2: TGroupBox;
     CocheMenuRentrerDisques: TCheckBox;
     CocheMenuEjecterDisques: TCheckBox;
     CocheMenuDisques: TCheckBox;
@@ -72,36 +172,23 @@ type
     GroupBoxMenu3: TGroupBox;
     CocheMenuCapturerEcran: TCheckBox;
     CocheMenuExecuter: TCheckBox;
-    GroupBoxGeneral2: TGroupBox;
-    RaccourciBureau: TCheckBox;
-    RaccourciLacementRapide: TCheckBox;
-    RaccourciDemarrer: TCheckBox;
-    GroupBoxGeneral1: TGroupBox;
-    LancerAutoOrdi: TCheckBox;
-    LancerAutoUser: TCheckBox;
     CocheMenuGraphisme: TCheckBox;
-    AjouterRac: TButton;
-    ModifierRac: TButton;
-    SupprimerRac: TButton;
-    DescendreRac: TButton;
-    MonterRac: TButton;
-    ajouterSeparateur: TButton;
-    Timer1: TTimer;
-    Panel1: TPanel;
     Label1: TLabel;
     Label2: TLabel;
     Label3: TLabel;
     Label4: TLabel;
-    site_internet: TLabel;
     Memo1: TMemo;
-    ListBoxRac: TListBox;
+    site_internet: TLabel;
+    GroupBox1: TGroupBox;
+    CloseExecWindow: TCheckBox;
+    Label5: TLabel;
+    ListePositionFenetreExec: TComboBox;
     procedure FormCreate(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure BoutonEnregistrerConfigurationClick(Sender: TObject);
     procedure BoutonAnnulerClick(Sender: TObject);
     procedure LancerAutoOrdiClick(Sender: TObject);
     procedure LancerAutoUserClick(Sender: TObject);
-    procedure TabControl1Change(Sender: TObject);
     procedure CocheMenuDisquesClick(Sender: TObject);
     procedure AjouterRacClick(Sender: TObject);
     procedure ModifierRacClick(Sender: TObject);
@@ -119,14 +206,13 @@ type
     { Déclarations privées}
     NewPopUpMenu1 : TPopupMenu ;                        // contient le menu PopUp
     IWantReallyExit : Boolean ;                         // Indique si on doit quitter l'application. Utilise pour CloseQuery()
-    ListeDesLecteurs : TDriveComboBox ;                 // Liste des lecteurs présents sur la machine
     ListItemDuMenuPopUp : array of TMenuitem ;          // Contient les menus
     NbList : Integer ;                                  // Pointeur sur la dernière entrée du menu
     ListItemEjecterDisque : array of TMenuitem ;        // Contient les menus pour l'ejection
     ListItemRentrerDisque : array of TMenuitem ;        // Contient les menus pour rentrer les disques
     NbListjecterDisque : Integer ;                      // Pointeur sur la dernière entrée du menu
     IconData: TNotifyIconData;                          // structure contenant les données pour l'icone
-    proc:function : BOOL; stdcall;                      // Pointe sur la fonction LockWorkStation
+    proc: function : BOOL; stdcall;                      // Pointe sur la fonction LockWorkStation
     procedure ajouterMenuArretWindows ;                 // Ajoute le menu arrêt windows
     procedure ajouterMenuFastSysTray ;                  // ajoute le menu de l'application
     procedure ajouterMenuSeparateur ;                   // Ajoute un séparateur dans le menu
@@ -157,10 +243,6 @@ type
     procedure WMTrayIconMessage(var Msg: TMessage);     // gestion des...
       message TrayIconMessage;                          // ...messages (clics souris) venant de l'icone
     procedure CreerMenu ;                               // Créer le menu
-    procedure ShowTabMenus(status : Boolean) ;          // Affiche le contenu de l'onglet Menus
-    procedure ShowTabGeneral(status : Boolean) ;        // Affiche le contenu de l'onglet Général
-    procedure ShowTabMesProgrammes(status : Boolean) ;  // Affiche le contenu de l'onglet Mes Programmes
-    procedure ShowTabAPropos(status : Boolean) ;        // Affiche le contenu de l'onglet A propos
     function  tokenPrivilege : Boolean ;                // Prend les privilège pour redémarrer/arrêter/hiberner windows
     procedure HibernateWindows(Sender: TObject) ;       // Redémarre l'ordi
     procedure SauveMesProgrammesConfig() ;              // Enregistre les raccourci Mes Programmes
@@ -174,7 +256,8 @@ type
     procedure MenueMeasureItem(Sender: TObject; ACanvas: TCanvas; var Width, Height: Integer);
     procedure MenueDrawItem(Sender: TObject; ACanvas: TCanvas; ARect: TRect;
       Selected: Boolean);
-
+    procedure StyleChanged( var msg:TMessage); message WM_THEMECHANGED; // Si le theme change sous Windows XP
+    procedure LancerModule(prog : string) ;             // Lance un module de Fast SysTray
     { Déclarations publiques}
   end;
 
@@ -186,28 +269,6 @@ var
 implementation
 
 {$R *.DFM}
-
-{*******************************************************************************
- * Affiche le contenu de l'onglet A propos
- ******************************************************************************}
-procedure TForm1.ShowTabAPropos(status : Boolean) ;
-begin
-    Panel1.Visible := Status ;
-end;
-
-{*******************************************************************************
- * Affiche le contenu de l'onglet Mes programmes
- ******************************************************************************}
-procedure TForm1.ShowTabMesProgrammes(status : Boolean) ;
-begin
-    ListBoxRac.Visible := status ;
-    AjouterRac.Visible := status ;
-    ModifierRac.Visible := status ;
-    SupprimerRac.Visible := status ;
-    MonterRac.Visible := status ;
-    DescendreRac.Visible := status ;
-    ajouterSeparateur.Visible := Status ;
-end;
 
 {*******************************************************************************
  * cette fonction renvoie 0 s'il n'y a pas d'instance du même programme déjà
@@ -234,26 +295,6 @@ Begin
         { restauration du vrai titre }
         Application.Title := TitreApplication ;
     end;
-end;
-
-{*******************************************************************************
- * Affiche le contenu de l'onglet Menus
- ******************************************************************************}
-procedure TForm1.ShowTabMenus(status : Boolean) ;
-begin
-    GroupBoxMenu1.Visible := Status ;
-    GroupBoxMenu2.Visible := Status ;
-    GroupBoxMenu3.Visible := Status ;
-    CocheMenuGraphisme.Visible := Status ;
-end;
-
-{*******************************************************************************
- * Affiche le contenu de l'onglet Menus
- ******************************************************************************} 
-procedure TForm1.ShowTabGeneral(status : Boolean) ;
-begin
-    GroupBoxGeneral1.Visible := Status ;
-    GroupBoxGeneral2.Visible := Status ;
 end;
 
 {*******************************************************************************
@@ -350,6 +391,28 @@ begin
         then
             LancerAutoOrdi.Enabled := False ;
 
+        Registre.CloseKey ;    
+        Registre.OpenKey('Software\Fast SysTray', True) ;
+
+        { Fermer la fenêtre executer }
+        if Registre.ValueExists('MenuFermerFenetreExec')
+        then
+            CloseExecWindow.Checked := Registre.ReadBool('MenuFermerFenetreExec')
+        else begin
+            CloseExecWindow.Checked := True ;
+            Registre.WriteBool('MenuFermerFenetreExec', CloseExecWindow.Checked) ;
+        end ;
+
+        { Position de la fenêtre Exécuter }
+        if Registre.ValueExists('PositionFenetreExec')
+        then
+            ListePositionFenetreExec.ItemIndex := Registre.ReadInteger('PositionFenetreExec')
+        else begin
+            ListePositionFenetreExec.ItemIndex := 3 ;
+            Registre.WriteInteger('PositionFenetreExec', ListePositionFenetreExec.ItemIndex) ;
+        end ;
+
+
         Registre.CloseKey ;
     finally
         Registre.Free ;
@@ -402,6 +465,15 @@ begin
             else
                 Registre.DeleteValue('Fast SysTray') ;
         end ;
+
+        Registre.CloseKey ;
+        Registre.OpenKey('Software\Fast SysTray', True) ;
+
+        { Fermer la fenêtre executer }
+        Registre.WriteBool('MenuFermerFenetreExec', CloseExecWindow.Checked) ;
+
+        { Position de la fenêtre Exécuter }
+        Registre.WriteInteger('PositionFenetreExec', ListePositionFenetreExec.ItemIndex) ;
 
         Registre.CloseKey ;
     finally
@@ -624,9 +696,9 @@ begin
             LitMenuConfig(Registre) ;
             LitGeneralConfig ;
 
-            if ListBoxRac.Items.Count <= 0
-            then
-                LitMesProgrammesConfig ;
+            { Bug #1 }
+            ListBoxRac.Items.Clear ;
+            LitMesProgrammesConfig ;
         end
         else begin
             SauveMenuConfig(Registre) ;
@@ -688,7 +760,7 @@ Var
   DeviceID : Word;
 begin
     { Lecteur }
-    S := ListeDesLecteurs.Items[(Sender as TMenuItem).Tag][1] + ':' ;
+    S := Chr(97 + TMenuItem(Sender).Tag) + ':\' ;
 
     { Flag pour l'ouverture }
     Flags := mci_Open_Type or mci_Open_Element ;
@@ -728,7 +800,7 @@ Var
   DeviceID : Word;
 begin
     { Lecteur }
-    S := ListeDesLecteurs.Items[(Sender as TMenuItem).Tag][1] + ':' ;
+    S := Chr(97 + TMenuItem(Sender).Tag) + ':\' ;
 
     { Flag pour l'ouverture }
     Flags := mci_Open_Type or mci_Open_Element ;
@@ -762,7 +834,7 @@ end ;
 procedure TForm1.AfficherLecteur(Sender: TObject) ;
 var lecteur : String ;
 begin
-    lecteur := ListeDesLecteurs.Items[(Sender as TMenuItem).Tag][1] + ':\' ;
+    lecteur := Chr(97 + TMenuItem(Sender).Tag) + ':\' ;
 
     ShellExecute(Handle, 'EXPLORE', PChar(lecteur), '','',SW_SHOWNORMAL);
 end ;
@@ -772,14 +844,16 @@ end ;
  ******************************************************************************}
 procedure TForm1.ajouterLecteur ;
 Var
-    i : Integer ;
     Bmp1 : TBitmap ;
     TypeLecteur : Integer ;
     ShInfo1 : SHFILEINFO ;
-    NbLecteur : Integer ;
-//    NouveauMenu : TMenuitem ;
+    { Liste des lecteurs présents }
+    DriveList : DWORD ;
+    { compteur et masque }
+    iDL : BYTE ;
+    jDL : DWORD ;
+    tmp : String ;
 begin
-
     { Créer le BMP }
     Bmp1 := TBitmap.Create() ;
     { Définir la couleur de transparence }
@@ -790,129 +864,141 @@ begin
     Bmp1.Width := 16;
     Bmp1.Height := 16;
 
-    { Récupère le nombre de lecteur }
-    NbLecteur := ListeDesLecteurs.Items.Count - 1 ;
+    { Récupère la liste des lecteurs }
+    DriveList := GetLogicalDrives() ;
 
-    if (CocheMenuRentrerDisques.Checked = True) or (CocheMenuEjecterDisques.Checked = True)
-    then begin
-        NbListjecterDisque := 0 ;
+    { Initialise le compteur }
+    NbListjecterDisque := 0 ;
 
-        { Ajoute les Lecteur }
-        For i := 0 to NbLecteur do
-        Begin
-            { Lit le type de lecteur }
-            TypeLecteur := GetDriveType(PChar(ListeDesLecteurs.Items[i][1] + ':\')) ;
+    { Ajoute les Lecteur }
+    for iDL := 0 to 31 do
+    begin
+        jDL := DriveList and (1 shl iDL) ;
 
-            { Si c'est un CD-ROM ou un disque amovible, ils peuvent être ejecté }
-            if (TypeLecteur = DRIVE_CDROM) //or (TypeLecteur = DRIVE_REMOVABLE)
+        if jDL <> 0
+        then begin
+            { Lecteur }
+            tmp := Chr(97 + iDL) + ':\' ;
+
+            { Menu Ejecter et Fermer }
+            if (CocheMenuRentrerDisques.Checked = True) or
+               (CocheMenuEjecterDisques.Checked = True)
+            then begin
+                { Lit le type de lecteur }
+                TypeLecteur := GetDriveType(PChar(tmp)) ;
+
+                { Si c'est un CD-ROM ou un disque amovible, ils peuvent être ejecté }
+                if (TypeLecteur = DRIVE_CDROM) //or (TypeLecteur = DRIVE_REMOVABLE)
+                then begin
+                    { Efface l'icone pour le prochaine icone }
+                    Bmp1.Canvas.Rectangle(0, 0, 16, 16) ;
+
+                    { Récupère les informations liés au lecteur }
+                    SHGetFileInfo(PChar(tmp), 0, ShInfo1, sizeOF(SHFILEINFO), SHGFI_ICON or SHGFI_SMALLICON or SHGFI_DISPLAYNAME) ;
+
+                    { Dessine l'icône }
+                    DrawIconEx(Bmp1.Canvas.Handle, 0, 0, ShInfo1.hIcon, 0, 0, 0, 0, DI_NORMAL) ;
+
+                    NbListjecterDisque := NbListjecterDisque + 1 ;
+
+                    if (CocheMenuEjecterDisques.Checked = True)
+                    then begin
+                        { Ejecter }
+                        NouveauMenu := TMenuItem.Create(Self);
+                        NouveauMenu.Caption := 'Ejecter ' + tmp ;
+                        NouveauMenu.OnClick := EjecterLecteur ;
+                        NouveauMenu.Tag := iDL ;
+                        NouveauMenu.Bitmap.Assign(Bmp1) ;
+                        NouveauMenu.Name := 'ME' + IntToStr(iDL) ;
+
+                        SetLength(ListItemEjecterDisque, NbListjecterDisque) ;
+
+                        ListItemEjecterDisque[NbListjecterDisque - 1] := NouveauMenu ;
+
+                        { On ne libère surtout pas le menu
+                        NouveauMenu.Free ;
+                        }
+                    end ;
+
+                    if (CocheMenuRentrerDisques.Checked = True)
+                    then begin
+                        { Rentrer }
+                        NouveauMenu := TMenuItem.Create(Self);
+                        NouveauMenu.Caption := 'Fermer ' + tmp ;
+                        NouveauMenu.OnClick := RentrerLecteur ;
+                        NouveauMenu.Tag := iDL ;
+                        NouveauMenu.Bitmap.Assign(Bmp1) ;
+                        NouveauMenu.Name := 'MR' + IntToStr(iDL) ;
+
+                        SetLength(ListItemRentrerDisque, NbListjecterDisque) ;
+
+                        ListItemRentrerDisque[NbListjecterDisque - 1] := NouveauMenu ;
+
+                        { On ne libère surtout pas le menu
+                        NouveauMenu.Free ;
+                        }
+                    end ;
+                end ;
+            end ;
+
+            { Liste des lecteurs }
+            if (CocheMenuDisques.Checked = True)
             then begin
                 { Efface l'icone pour le prochaine icone }
                 Bmp1.Canvas.Rectangle(0, 0, 16, 16) ;
 
                 { Récupère les informations liés au lecteur }
-                SHGetFileInfo(PChar(ListeDesLecteurs.Items[i][1] + ':\'), 0, ShInfo1, sizeOF(SHFILEINFO), SHGFI_ICON or SHGFI_SMALLICON) ;
+                SHGetFileInfo(PChar(tmp), 0, ShInfo1, sizeOF(SHFILEINFO), SHGFI_ICON or SHGFI_SMALLICON or SHGFI_DISPLAYNAME) ;
 
                 { Dessine l'icône }
                 DrawIconEx(Bmp1.Canvas.Handle, 0, 0, ShInfo1.hIcon, 0, 0, 0, 0, DI_NORMAL) ;
 
-                NbListjecterDisque := NbListjecterDisque + 1 ;
+                NouveauMenu := TMenuItem.Create(Self);
 
-                if (CocheMenuEjecterDisques.Checked = True)
-                then begin
-                    { Ejecter }
-                    NouveauMenu := TMenuItem.Create(Self);
-                    NouveauMenu.Caption := 'Ejecter ' + ListeDesLecteurs.Items[i][1] + ':\' ;
-                    NouveauMenu.OnClick := EjecterLecteur ;
-                    NouveauMenu.Tag := i ;
-                    NouveauMenu.Bitmap.Assign(Bmp1) ;
-                    NouveauMenu.Name := 'ME' + IntToStr(i) ;
+                if CocheMenuDisquesLabel.Checked
+                then
+                    NouveauMenu.Caption := String(ShInfo1.szDisplayName)
+                else
+                    NouveauMenu.Caption := tmp ;
 
-                    SetLength(ListItemEjecterDisque, NbListjecterDisque) ;
+                NouveauMenu.OnClick := AfficherLecteur ;
+                NouveauMenu.Tag := iDL ;
+                NouveauMenu.Bitmap.Assign(Bmp1) ;
+                NouveauMenu.Name := 'MD' + IntToStr(iDL) ;
 
-                    ListItemEjecterDisque[NbListjecterDisque - 1] := NouveauMenu ;
+                NbList := NbList + 1 ;
+                SetLength(ListItemDuMenuPopUp, NbList) ;
 
-                    { On ne libère surtout pas le menu
-                    NouveauMenu.Free ;
-                    }
-                end ;
-
-                if (CocheMenuRentrerDisques.Checked = True)
-                then begin
-                    { Rentrer }
-                    NouveauMenu := TMenuItem.Create(Self);
-                    NouveauMenu.Caption := 'Fermer ' + ListeDesLecteurs.Items[i][1] + ':\' ;
-                    NouveauMenu.OnClick := RentrerLecteur ;
-                    NouveauMenu.Tag := i ;
-                    NouveauMenu.Bitmap.Assign(Bmp1) ;
-                    NouveauMenu.Name := 'MR' + IntToStr(i) ;
-
-                    SetLength(ListItemRentrerDisque, NbListjecterDisque) ;
-
-                    ListItemRentrerDisque[NbListjecterDisque - 1] := NouveauMenu ;
-
-                    { On ne libère surtout pas le menu
-                    NouveauMenu.Free ;
-                    }
-                end ;
+                ListItemDuMenuPopUp[NbList - 1] := NouveauMenu ;
             end ;
         end ;
-
-        if (CocheMenuEjecterDisques.Checked = True)
-        then begin
-            { Enregistre le sous-menu Ejecter }
-            NbList := NbList + 1 ;
-            SetLength(ListItemDuMenuPopUp, NbList) ;
-            ListItemDuMenuPopUp[NbList - 1] := NewSubMenu('Ejecter les disques', 0, 'SubItemEjecterCD' , ListItemEjecterDisque, True) ;
-        end ;
-
-        if (CocheMenuRentrerDisques.Checked = True)
-        then begin
-            { Enregistre le sous-menu Rentrer }
-            NbList := NbList + 1 ;
-            SetLength(ListItemDuMenuPopUp, NbList) ;
-            ListItemDuMenuPopUp[NbList - 1] := NewSubMenu('Fermer les disques', 0, 'SubItemRentrerCD' , ListItemRentrerDisque, True) ;
-        end ;
-
-        { Ajoute un Séparateur }
-        ajouterMenuSeparateur ;
     end ;
 
     if (CocheMenuDisques.Checked = True)
-    then begin
-        { Liste des Disque à Explorer }
-        For i := 0 to NbLecteur do
-        Begin
-            { Efface l'icone pour le prochaine icone }
-            Bmp1.Canvas.Rectangle(0, 0, 16, 16) ;
-
-            { Récupère les informations liés au lecteur }
-            SHGetFileInfo(PChar(ListeDesLecteurs.Items[i][1] + ':\'), 0, ShInfo1, sizeOF(SHFILEINFO), SHGFI_ICON or SHGFI_SMALLICON) ;
-
-            { Dessine l'icône }
-            DrawIconEx(Bmp1.Canvas.Handle, 0, 0, ShInfo1.hIcon, 0, 0, 0, 0, DI_NORMAL) ;
-
-            NouveauMenu := TMenuItem.Create(Self);
-
-            if CocheMenuDisquesLabel.Checked
-            then
-                NouveauMenu.Caption := ListeDesLecteurs.Items[i]
-            else
-                NouveauMenu.Caption := ListeDesLecteurs.Items[i][1] + ':\' ;
-
-            NouveauMenu.OnClick := AfficherLecteur ;
-            NouveauMenu.Tag := i ;
-            NouveauMenu.Bitmap.Assign(Bmp1) ;
-            NouveauMenu.Name := 'MD' + IntToStr(i) ;
-
-            NbList := NbList + 1 ;
-            SetLength(ListItemDuMenuPopUp, NbList) ;
-
-            ListItemDuMenuPopUp[NbList - 1] := NouveauMenu ;
-        end ;
-
+    then
         { Ajoute un Séparateur }
         ajouterMenuSeparateur ;
+
+    if (CocheMenuEjecterDisques.Checked = True)
+    then begin
+        { Enregistre le sous-menu Ejecter }
+        NbList := NbList + 1 ;
+        SetLength(ListItemDuMenuPopUp, NbList) ;
+        ListItemDuMenuPopUp[NbList - 1] := NewSubMenu('Ejecter les disques', 0, 'SubItemEjecterCD' , ListItemEjecterDisque, True) ;
     end ;
+
+    if (CocheMenuRentrerDisques.Checked = True)
+    then begin
+        { Enregistre le sous-menu Rentrer }
+        NbList := NbList + 1 ;
+        SetLength(ListItemDuMenuPopUp, NbList) ;
+        ListItemDuMenuPopUp[NbList - 1] := NewSubMenu('Fermer les disques', 0, 'SubItemRentrerCD' , ListItemRentrerDisque, True) ;
+    end ;
+
+    if (CocheMenuEjecterDisques.Checked = True) or (CocheMenuRentrerDisques.Checked = True)
+    then
+        { Ajoute un Séparateur }
+        ajouterMenuSeparateur ;
 
     Bmp1.Free
 end ;
@@ -947,6 +1033,7 @@ begin
     NouveauMenu.OnClick := afficherAide ;
     NouveauMenu.ImageIndex := 11 ;
     NouveauMenu.Name := 'MAide' ;
+    { le -1 indique qu'il ne faut pas détruire se menu }
 
     NbList := NbList + 1 ;
     SetLength(ListItemDuMenuPopUp, NbList) ;
@@ -986,7 +1073,6 @@ begin
     if Application.MessageBox('Etes-vous sûr de vouloir quitter Fast SysTray ?', 'Quitter', MB_YESNO or MB_ICONQUESTION) = IDYES
     then begin
         IWantReallyExit := True ;
-        SupprimeIcone ;
         Application.Terminate ;
     end ;
 end ;
@@ -1208,11 +1294,21 @@ end;
  * Gestion du Clic Droit et du Double Clic provenant de la Tray Icon
  ******************************************************************************}
 procedure TForm1.WMTrayIconMessage(var Msg: TMessage);  // voir Messages.pas
+{ Indique qu'on est déjà en train de créer le menu.
+  Evite ainsi le message "ShortCut0 existe déjà" }
+Const     Lock : Boolean = False ;
 begin
-    case Msg.LParam of
-        WM_RBUTTONUP : CreerMenu ;
-        WM_LBUTTONUP : CreerMenu ;
-    end;
+    if Lock = False
+    then begin
+        Lock := True ;
+
+        case Msg.LParam of
+            WM_RBUTTONUP : CreerMenu ;
+            WM_LBUTTONUP : CreerMenu ;
+        end;
+
+        Lock := False ;
+    end ;
 end;
 
 {*******************************************************************************
@@ -1222,22 +1318,22 @@ procedure TForm1.FormCreate(Sender: TObject);
 Var osVer : OSVERSIONINFO ;
     Registre : TRegistry ;
     Fenetre : HWND ;
-    handle : integer ;
+    handleProc : integer ;
 begin
     { Vérifie que la fonction LockWorkStation existe. Winodws NT seulement }
-    Handle := LoadLibrary('user32.dll');
+    HandleProc := LoadLibrary('user32.dll');
 
-    if Handle <> 0
+    if HandleProc <> 0
     then
-        @proc := GetProcAddress(Handle, 'LockWorkStation') ;
+        @proc := GetProcAddress(HandleProc, 'LockWorkStation') ;
 
 
-    FreeLibrary(Handle);
+    FreeLibrary(HandleProc);
 
     { Vérifie qu'il n'y a pas déjà un occurence de lancée }
     Fenetre := IsPrevinstance ;
 
-    If IsPrevinstance <> 0
+    If Fenetre <> 0
     then
         if Application.MessageBox('Fast SysTray est déjà lancé, voulez-vous le relancer ?', 'Question', MB_YESNO or MB_ICONQUESTION) = IDYES
         then
@@ -1283,12 +1379,6 @@ begin
         Registre.Free ;
     end ;
 
-    { Position les onglets }
-    ShowTabMenus(True) ;
-    ShowTabGeneral(False) ;
-    ShowTabMesProgrammes(False) ;
-    ShowTabAPropos(False) ;
-
     AjouteIcone;
 end;
 
@@ -1310,7 +1400,10 @@ begin
             SupprimeIcone ;
             CanClose := True ;
         end ;
-    end ;
+
+    end
+    else
+        SupprimeIcone ;
 end;
 
 {*******************************************************************************
@@ -1337,12 +1430,6 @@ begin
     then begin
         Timer1.Enabled := False ;
 
-        { Si timer pas désactiver alors destruction }
-        if (ListeDesLecteurs <> nil)
-        then begin
-            ListeDesLecteurs.Free ;
-        end ;
-
         if (NewPopUpMenu1 <> nil)
         then begin
             NewPopUpMenu1.Free ;
@@ -1357,11 +1444,6 @@ begin
 
     if (CocheMenuRentrerDisques.Checked = True) or (CocheMenuEjecterDisques.Checked = True) or (CocheMenuDisques.Checked = True)
     then begin
-        { Créer une liste de lecteur }
-        ListeDesLecteurs := TDriveComboBox.Create(Self) ;
-        ListeDesLecteurs.Parent := Self ;
-        ListeDesLecteurs.Visible := False ;
-
         { Ajoute le menu des lecteurs }
         ajouterLecteur ;
     end ;
@@ -1457,38 +1539,6 @@ begin
     LancerAutoOrdi.Enabled := not LancerAutoUser.Checked ;
 end;
 
-{*******************************************************************************
- * Gère les onglets
- ******************************************************************************}
-procedure TForm1.TabControl1Change(Sender: TObject);
-begin
-    case (Sender as TTabControl).TabIndex of
-        0 : begin
-                ShowTabMenus(True) ;
-                ShowTabGeneral(False) ;
-                ShowTabMesProgrammes(False) ;
-                ShowTabAPropos(False) ;
-            end ;
-        1 : begin
-                ShowTabMenus(False) ;
-                ShowTabGeneral(True) ;
-                ShowTabMesProgrammes(False) ;
-                ShowTabAPropos(False) ;
-            end ;
-        2 : begin
-                ShowTabMenus(False) ;
-                ShowTabGeneral(False) ;
-                ShowTabMesProgrammes(True) ;
-                ShowTabAPropos(False) ;
-            end ;
-        3 : begin
-                ShowTabMenus(False) ;
-                ShowTabGeneral(False) ;
-                ShowTabMesProgrammes(False) ;
-                ShowTabAPropos(True) ;
-            end ;
-    end ;
-end;
 
 {*******************************************************************************
  * Désactive la coche 'Affiche les label des lecteurs'
@@ -1712,7 +1762,7 @@ begin
     if Status and (ListRacCmd.Strings[ListBoxRac.ItemIndex] = '')
     then
         ModifierRac.Enabled := False ;
-        
+
     { Si on est sur le premier éléments, on désactive le bouton monter }
     if (Status = True) and (ListBoxRac.ItemIndex < 1)
     then
@@ -1997,11 +2047,6 @@ begin
         Timer1.Enabled := False ;
 
         { On détruit les ressources du menu }
-        if (ListeDesLecteurs <> nil)
-        then begin
-            ListeDesLecteurs.Free ;
-        end ;
-
         if (NewPopUpMenu1 <> nil)
         then begin
             NewPopUpMenu1.Free ;
@@ -2049,14 +2094,58 @@ begin
 end ;
 
 {*******************************************************************************
- * Affiche l'explorateur avec le lecteur demandé
+ * Lance un prog
  ******************************************************************************}
 procedure TForm1.Executer(Sender: TObject) ;
+begin
+    LancerModule('\fst_run.exe') ;
+end ;
+
+{*******************************************************************************
+ * Affiche le site internet
+ ******************************************************************************}
+procedure TForm1.site_internetClick(Sender: TObject);
+begin
+    ShellExecute(Handle, 'OPEN', 'http://php4php.free.fr/fastsystray','','',SW_SHOWNORMAL);
+end;
+
+{*******************************************************************************
+ * Copie l'écran dans le presse papier
+ ******************************************************************************}
+procedure TForm1.CopieDEcran(Sender: TObject) ;
+begin
+    LancerModule('\fst_sc.exe') ;
+end ;
+
+{*******************************************************************************
+ * Lance l'aide
+ ******************************************************************************}
+procedure TForm1.afficherAide(Sender: TObject) ;
+begin
+    ShellExecute(Handle, 'OPEN', PChar(ExtractFileDir(Application.ExeName) + '\aide\index.htm'),'','',SW_SHOWNORMAL);
+end;
+
+{*******************************************************************************
+ * Se déclanche quand le thème de Windows XP change
+ * Dans certain cas, la fenêtre apparait dans la barre des tâches
+ ******************************************************************************}
+procedure TForm1.StyleChanged( var msg:TMessage);
+begin
+  ShowWindow(Application.handle,Sw_hide);
+
+  { Continue à propager le message }
+  inherited;
+end;
+
+{*******************************************************************************
+ * Affiche l'explorateur avec le lecteur demandé
+ ******************************************************************************}
+procedure TForm1.LancerModule(prog : string) ;
 var Status : Boolean ;
 begin
     Status := False ;
 
-    case ShellExecute(Handle, 'OPEN', PChar(ExtractFileDir(Application.ExeName) + '\fst_run.exe'), '','',SW_SHOWNORMAL)
+    case ShellExecute(Handle, 'OPEN', PChar(ExtractFileDir(Application.ExeName) + prog), '','',SW_SHOWNORMAL)
     of
         0                    : ;
         ERROR_FILE_NOT_FOUND : ;
@@ -2073,50 +2162,7 @@ begin
 
     if Status = False
     then
-        Application.MessageBox('Impossible de lancer le module Executer. Veuillez réinstaller Fast SysTray.', 'Erreur', MB_OK + MB_ICONERROR) ;
+        Application.MessageBox('Impossible de lancer le module voulu. Veuillez réinstaller Fast SysTray.', 'Erreur', MB_OK + MB_ICONERROR) ;
 end ;
-
-{*******************************************************************************
- * Affiche le site internet
- ******************************************************************************}
-procedure TForm1.site_internetClick(Sender: TObject);
-begin
-    ShellExecute(Handle, 'OPEN', 'http://php4php.free.fr/fastsystray','','',SW_SHOWNORMAL);
-end;
-
-{*******************************************************************************
- * Copie l'écran dans le presse papier
- ******************************************************************************}
-procedure TForm1.CopieDEcran(Sender: TObject) ;
-var HandleDCBureau : HDC;
-    Bmp1 : TBitmap ;
-begin
-    Bmp1 := TBitmap.Create ;
-    
-    { Prend le handle du bureau }
-    HandleDCBureau := GetDC(GetDesktopWindow) ;
-
-    try
-        { La largeur et la hauteur de l'image est celle du bureau }
-        Bmp1.Width := Screen.Width ;
-        Bmp1.Height := Screen.Height;
-
-        { Recopie l'image }
-        BitBlt(Bmp1.Canvas.Handle, 0, 0, Screen.Width, Screen.Height,
-               HandleDCBureau, 0, 0, SrcCopy) ;
-
-        Clipboard.Assign(Bmp1) ;               
-     finally
-         ReleaseDC(GetDesktopWindow,HandleDCBureau);
-     end;
-end ;
-
-{*******************************************************************************
- * Lance l'aide
- ******************************************************************************}
-procedure TForm1.afficherAide(Sender: TObject) ;
-begin
-    ShellExecute(Handle, 'OPEN', PChar(ExtractFileDir(Application.ExeName) + '\aide\index.htm'),'','',SW_SHOWNORMAL);
-end;
 
 end.

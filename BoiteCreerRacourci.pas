@@ -4,7 +4,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, FileCtrl ;
+  StdCtrls, FileCtrl, ComObj, ShlObj, ActiveX, ShellAPI ;
 
 type
   TCreerRaccourci = class(TForm)
@@ -28,6 +28,7 @@ type
   private
     { Déclarations privées}
     function VerifierRaccourci() : boolean ;
+    function StrCopyN(chaine : String; valMax : Integer) : String ;    
   public
     { Déclarations publiques}
     IsModify : Boolean ;
@@ -55,6 +56,12 @@ end;
  ******************************************************************************}
 procedure TCreerRaccourci.parcourirClick(Sender: TObject);
 Var S : String ;
+    I  : IShellLink ;
+    Ip : IPersistFile ;
+    w  : win32_find_dataa ;
+    pc : array[0..MAX_PATH-1] of Char ;
+    argumentsString : String ;
+    lien : String ;
 begin
     { Si on indique que c'est un répertoire }
     if IsReperoire.Checked
@@ -78,8 +85,34 @@ begin
         { Affiche la boite de dialogue pour les commande }
         if OpenDialog1.Execute
         then begin
+            { Mémorise le nom du fichier ou du lien }
+            lien := OpenDialog1.FileName ;
+
+            { Vérifie si c'est un lien }
+            if UpperCase(ExtractFileExt(OpenDialog1.FileName)) = '.LNK'
+            then begin
+                I := CreateComObject(CLSID_ShellLink)as IShellLink ;
+                Ip := I as IPersistFile ;
+                Ip.load(StringToOleStr(OpenDialog1.FileName), STGM_READ) ;
+
+                { Récupère le fichier }
+                I.GetPath(pc, max_path, w, SLGP_UNCPRIORITY) ;
+                OpenDialog1.FileName := pc ;
+
+                { Récupère les arguments }
+                I.GetArguments(pc, max_path) ;
+                argumentsString := pc ;
+            end
+            else
+                argumentsString := '' ;
+
+
             Programme.Text := OpenDialog1.FileName ;
-            Texte.Text := ExtractFileName(OpenDialog1.FileName) ;
+            Arguments.Text := argumentsString ;
+
+            { Récupérer le label. NomFichier-Extention}
+            lien := ExtractFileName(lien) ;
+            Texte.Text := StrCopyN(lien, length(lien) - length(ExtractFileExt(lien))) ;
         end ;
 end;
 
@@ -136,7 +169,7 @@ begin
         Texte.Text := Form1.ListBoxRac.Items[Form1.ListBoxRac.ItemIndex] ;
 
         Caption := 'Modification d''un raccourci' ;
-
+        
         { On récupère les attributs du fichier }
         i := FileGetAttr(Programme.Text) ;
 
@@ -172,6 +205,9 @@ begin
     arguments.Text := '' ;
 end;
 
+{*******************************************************************************
+ * Vérifie l'existance du fichier
+ ******************************************************************************}
 function TCreerRaccourci.VerifierRaccourci() : boolean ;
 begin
     Result := True ;
@@ -183,6 +219,28 @@ begin
         if Application.MessageBox('Le fichier ou répertoire indiqué est introuvable. Voulez-vous tout de même valider le raccourci ?', 'Avertissement', MB_YESNO + MB_ICONWARNING) = IDNO
         then
             Result := False ;
+end ;
+
+{*******************************************************************************
+ * Copie les X premiers caractères d'une chaine.
+ * Si la chaine est plus courte que ce qu'on veut copier, c'est la chaine qui
+ * est retourné.
+ *
+ * Entrée : chaine à copier, nombre de caractères à copier
+ * Sortie : aucune
+ * Retour : la chaine voulue
+ ******************************************************************************}
+function TCreerRaccourci.StrCopyN(chaine : String; valMax : Integer) : String ;
+Var i : Integer ;
+begin
+    Result := '' ;
+
+    if (Length(chaine) >= valMax)
+    then
+        for i := 1 to valMax do
+            Result := Result + chaine[i]
+    else
+        Result := chaine ;
 end ;
 
 end.

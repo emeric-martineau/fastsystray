@@ -1,5 +1,7 @@
+[FileVersion]
+Version=6.0
 [Compiler]
-A=1
+A=8
 B=0
 C=1
 D=1
@@ -7,7 +9,7 @@ E=0
 F=0
 G=1
 H=1
-I=0
+I=1
 J=1
 K=0
 L=1
@@ -51,8 +53,11 @@ UsePackages=0
 [Parameters]
 RunParams=
 HostApplication=
+Launcher=
+UseLauncher=0
+DebugCWD=
 [Version Info]
-IncludeVerInfo=1
+IncludeVerInfo=0
 AutoIncBuild=0
 MajorVer=1
 MinorVer=0
@@ -66,16 +71,16 @@ DLL=0
 Locale=1036
 CodePage=1252
 [Version Info Keys]
-CompanyName=MARTINEAU Emeric
-FileDescription=Module Exécuter de Fast SysTray
+CompanyName=
+FileDescription=
 FileVersion=1.0.0.0
 InternalName=
-LegalCopyright=Copyright 2004 MARTINEAU Emeric
+LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
 ProductVersion=1.0.0.0
-Comments=Produit sous licence GPL. Un copie de la licence doit vous être fournit avec ce programme.
+Comments=
 [HistoryLists\hlUnitAliases]
 Count=1
 Item0=WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;
