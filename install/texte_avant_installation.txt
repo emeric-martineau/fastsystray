@@ -1,0 +1,19 @@
+Fast SysTray est un utilitaire d'accès rapide aux applications, lecteurs et ajoute de nombreuses fonctionnalités en plus pour augmenter votre productivité.
+
+Fast SysTray est un programme LIBRE et GRATUIT. Vous pouvez le diffuser et le modifier librement conformément à la licence "GNU General Public License" (GNU GPL).
+Ce programme vous est fournit SANS AUCUNES GARANTIES. En aucun cas l'auteur ne pourra être tenu responsable des éventuels dommages liés à l'utilisation de ce programme.
+
+L'utilitaire d'installation et de désinstallation N'EST PAS de l'auteur. L'auteur utilise le programme "Inno Setup" (http://www.innosetup.com/).
+L'auteur ne peut être tenu pour responsable des dommages causés par ce programme.
+
+Modification de la version 1.1.1 :
+- correction d'un bug qui faisait mélanger les raccourcis,
+- correction d'un bug qui faisait parfois ne pas supprimer l'icone en barre de tâche,
+- ajout de la possibilité d'exporter/importer la configuration,
+- possibilité d'ouvrir les lecteurs et répertoires dans une fenêtre et pas par l'explorateur,
+- renommage du menu 'Arrêter Windows' en 'Windows',
+- amélioration de la copie d'écran, capture réellement le curseur,
+- ajout d'un menu 'Changer d'utilisateur',
+- ajout de la possibilité de faire du drag&drop pour ajouter un lien,
+- si on double clique sur un raccourci dans la liste des raccourcis, édite le raccourci en question.
+- mise à jour de la documentation.

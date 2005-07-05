@@ -36,7 +36,7 @@
  * Explication :
  * -------------
  * Si la(les) touche(s) désirée(s) est(sont) appuyée(s), le programme reçoit un
- * message WM_USER.
+ * message WM_COPYDATA.
  * Envoie un message quand clique droit
  ******************************************************************************}
 library HookDll;
@@ -59,11 +59,12 @@ Var
 
 {*******************************************************************************
  * Cette fonction reçoit tout les message venant du clavier.
- * Si les touches voulues sont actionnées, elle envoie le message WM_USER à
+ * Si les touches voulues sont actionnées, elle envoie le message WM_COPYDATA à
  * l'application.
  ******************************************************************************}
 function HookActionCallBackKeyBoard(Code: integer; Touche: WPARAM; KeyBoardHook: LPARAM):LRESULT; stdcall;
 Var Premier : Boolean ;
+    CopyDataStruct : TCopyDataStruct ;
 begin
     Result := 0 ;
     Premier := False ;
@@ -100,11 +101,12 @@ begin
         { la touche voulue est-elle activé ? }
         if (Premier = True) and (Touche = DonneesHook.Key)
         then begin
-            SendMessage(DonneesHook.HandleDest, WM_USER, 0, 0) ;
+            Result := SendMessage(DonneesHook.HandleDest, WM_COPYDATA, HInstance, LongInt(@CopyDataStruct)) ;
+
             { Si Result = 0, le message continue et donc l'application va
               recevoir le message clavier, ce qu'on ne veut surtout pas pour
               ne pas géner la copie d'écran }
-            Result := 1 ;
+//            Result := 1 ;
         end ;
     end;
 
@@ -137,10 +139,11 @@ end;
 
 {*******************************************************************************
  * Cette fonction reçoit tout les message venant du clavier.
- * Si les touches voulues sont actionnées, elle envoie le message WM_USER à
+ * Si les touches voulues sont actionnées, elle envoie le message WM_COPYDATA à
  * l'application.
  ******************************************************************************}
 function HookActionCallBackSouris(Code: integer; Msg: WPARAM; MouseHook: LPARAM):LRESULT; stdcall;
+Var CopyDataStruct : TCopyDataStruct ;
 begin
     Result := 0 ;
 
@@ -151,8 +154,8 @@ begin
 
         if (GetAsyncKeyState(VK_RBUTTON) and $8000) <> 0
         then begin
-            SendMessage(DonneesHook.HandleDest, WM_USER, 0, 0) ;
-            Result := 1 ;
+            Result := SendMessage(DonneesHook.HandleDest, WM_COPYDATA, HInstance, LongInt(@CopyDataStruct)) ;
+//            Result := 1 ;
         end ;
     end;
 

@@ -51,9 +51,9 @@ type
     P: TPoint;
     procedure ConfigurerCapture ;
     procedure CapturerEcran(x1,y1,x2,y2 : Integer) ;
-    procedure ReceiveMsg(var msg:TMessage); message WM_USER ;
   public
     { Déclarations publiques}
+    procedure ReceiveMsg(var msg:TMessage); message WM_COPYDATA ;
   end;
 
 var
@@ -183,8 +183,8 @@ begin
             Visible := True ;
             Application.ShowMainForm := True ;
         end
-        else
-            FinalisationHook ;
+//        else
+//            FinalisationHook ;
     end
     { Clavier } 
     else if Clavier.Checked
@@ -214,12 +214,12 @@ begin
 
         if not InitialisationHookClavier(Handle, ToucheEnPlus, ToucheClavier)
         then begin
-            Application.MessageBox('Impossible d''initialiser le hook souris', 'Erreur', MB_OK) ;
+            Application.MessageBox('Impossible d''initialiser le hook clavier', 'Erreur', MB_OK) ;
             Visible := True ;
             Application.ShowMainForm := True ;
         end
-        else
-            FinalisationHook ;
+//        else
+//            FinalisationHook ;
     end ;
 end;
 
@@ -300,6 +300,11 @@ end ;
 procedure TForm1.CapturerEcran(x1, y1, x2, y2 : Integer) ;
 var HandleDCBureau : HDC;
     Bmp1 : TBitmap ;
+
+    r : TRect ;
+    CI : TCursorInfo ;
+    Icon : TIcon ;
+    II : TIconInfo ;
 begin
     { Cache l'application car si on utilise les hooks, elle réapparait }
     Visible := False ;
@@ -320,8 +325,27 @@ begin
                HandleDCBureau, x1, y1, SrcCopy) ;
 
         if Pointeur.Checked
-        then
-            DrawIconEx(Bmp1.Canvas.Handle, P.x, P.y, Curseur, 0, 0, 0, 0, DI_NORMAL) ;
+        then begin
+            r := Bmp1.Canvas.ClipRect ;
+            
+            Icon := TIcon.Create ;
+
+            try
+                CI.cbSize := SizeOf(CI) ;
+
+                if GetCursorInfo(CI)
+                then begin
+                    Icon.Handle := CopyIcon(CI.hCursor) ;
+
+                    if GetIconInfo(Icon.Handle, II)
+                    then begin
+                        Bmp1.Canvas.Draw(CI.ptScreenPos.x - Integer(II.xHotspot) - r.Left, CI.ptScreenPos.y - Integer(II.yHotspot) - r.Top, Icon);
+                    end ;
+                end ;
+            finally
+                Icon.Free ;
+            end ;
+        end ;
 
         Clipboard.Assign(Bmp1) ;
      finally
@@ -368,6 +392,7 @@ end;
 procedure TForm1.ReceiveMsg(var msg:TMessage);
 begin
     ConfigurerCapture ;
+    FinalisationHook;
 end ;
 
 {*******************************************************************************

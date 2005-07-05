@@ -25,6 +25,7 @@ type
     procedure okClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure IsReperoireClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
   private
     { Déclarations privées}
     function VerifierRaccourci() : boolean ;
@@ -32,6 +33,7 @@ type
   public
     { Déclarations publiques}
     IsModify : Boolean ;
+    procedure WMDropFiles(var Msg: TWMDropFiles); message WM_DROPFILES;    
   end;
 
 var
@@ -242,5 +244,40 @@ begin
     else
         Result := chaine ;
 end ;
+
+procedure TCreerRaccourci.FormCreate(Sender: TObject);
+begin
+    // Indique que l'on peut faire du drag&drop sur la feuille
+    DragAcceptFiles(Self.Handle,true);
+end;
+
+{******************************************************************************
+ * Procédure appelée quand on drop quelque chose
+ ******************************************************************************}
+procedure TCreerRaccourci.WMDropFiles(var Msg: TWMDropFiles);
+var
+  NomDuFichier : array[0..MAX_PATH] of char;
+  S : String ;
+
+begin
+  try
+    if DragQueryFile(Msg.Drop, 0, NomDuFichier, sizeof(NomDuFichier)) > 0
+    then begin
+        Programme.Text := String(NomDuFichier) ;
+
+        S := ExtractFileName(Programme.Text) ;
+
+        { Si quand on fait l'extraction du nom, on a rien on met le programme }
+        if S <> ''
+        then
+            Texte.Text := ExtractFileName(S)
+        else
+            Texte.Text := Programme.Text ;
+    end ;
+
+  finally
+    DragFinish(Msg.Drop);
+  end;
+end;
 
 end.

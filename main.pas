@@ -3,7 +3,7 @@
  *
  * Fast SysTray
  *
- * Version 1.1.0
+ * Version 1.1.1
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software
@@ -37,6 +37,22 @@
  *                la copie,
  *              - suppression du message : "ShortCut0 existe déjà".
  *
+ * Version 1.1.1 :
+ *              - correction d'un bug qui faisait mélanger les raccourcis,
+ *              - correction d'un bug qui faisait parfois ne pas supprimer
+ *                l'icone en barre de tâche,
+ *              - ajout de la possibilité d'exporter/importer la configuration,
+ *              - possibilité d'ouvrir les lecteurs et répertoires dans une
+ *                fenêtre et pas par l'explorateur,
+ *              - renommage du menu 'Arrêter Windows' en 'Windows',
+ *              - amélioration de la copie d'écran, capture réellement le
+ *                curseur,
+ *              - ajout d'un menu 'Changer d'utilisateur',
+ *              - ajout de la possibilité de faire du drag&drop pour ajouter un
+ *                lien,
+ *              - si on double clique sur un raccourci dans la liste des
+ *                raccourcis, édite le raccourci en question.
+ *              - mise à jour de la documentation.
  *******************************************************************************
  *******************************************************************************
  * Liste des images pour les menus. Numéro d'index et à quoi elles correspondent
@@ -53,6 +69,7 @@
  *                 9 : exécuter
  *                10 : capture d'écran
  *                11 : Aide
+ *                12 : Changer d'utilisateur 
  *******************************************************************************
  *******************************************************************************
  * Registre
@@ -104,6 +121,12 @@
  * \Software\Fast SysTray\MenuFermerFenetreExec (DWORD)
  * -> 1 : ferme la fenêtre après exécution de la commande, 0 : non
  *
+ * \Software\Fast SysTray\OpenInWindow (DWORD)
+ * -> 1 : ouvre le lecteur ou le dossier dans une fenêtre, 0 : lance l'explorateur sur le dossier ou lecteur
+ *
+ * \Software\Fast SysTray\MenuSwitchUser (DWORD)
+ * -> 1 : Affiche le menu Changer d'utilisateur, 0 : non
+ *
  * \Software\Fast SysTray\PositionFenetreExec (DWORD)
  * -> 0 : en haut à gauche
  *    1 : en bas à gauche
@@ -119,6 +142,9 @@
  *
  * Bug #1 : quand on clique sur le bouton "Annuler" de la fenêtre préférence
  *          et la liste de raccourci a été modifiée, enregistre ce menu.
+ *
+ * Bug #2 : se mélangeait dans les raccourcis. Je ne vidais pas toutes les
+ *          listes lorsque je les recréais.
  *******************************************************************************
 }
 unit main;
@@ -129,7 +155,7 @@ uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   StdCtrls, ExtCtrls, Menus, ShellApi, ComCtrls, filectrl, MMSystem, Registry,
   ComObj, ShlObj, ActiveX, ImgList, XPTheme, BoiteCreerRacourci, Clipbrd,
-  Tabnotbk;
+  Tabnotbk, IniFiles;
 
 const
   TrayIconMessage = WM_USER + 100 ;
@@ -183,6 +209,12 @@ type
     CloseExecWindow: TCheckBox;
     Label5: TLabel;
     ListePositionFenetreExec: TComboBox;
+    ExporterConfigRaccourcis: TButton;
+    ImporterConfigRaccourcis: TButton;
+    SaveDialog1: TSaveDialog;
+    OpenDialog1: TOpenDialog;
+    OpenInWindow: TCheckBox;
+    CocheMenuSwitchUser: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure BoutonEnregistrerConfigurationClick(Sender: TObject);
@@ -199,6 +231,9 @@ type
     procedure DescendreRacClick(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     procedure site_internetClick(Sender: TObject);
+    procedure ExporterConfigRaccourcisClick(Sender: TObject);
+    procedure ImporterConfigRaccourcisClick(Sender: TObject);
+    procedure ListBoxRacDblClick(Sender: TObject);
   public
     ListRacCmd : TStringList ;                          // Liste contenant les commandes des raccourcis du menu
     ListRacArg : TStringList ;                          // Liste contenant les arguments de la ligne de commandes des raccourcis du menu    
@@ -229,6 +264,7 @@ type
     procedure RentrerLecteur(Sender: TObject) ;         // Rentre le lecteur
     procedure EcranDeVeilleWindows(Sender: TObject) ;   // Ecran de veille
     procedure MiseEnVeilleWindows(Sender: TObject) ;    // Mise en veille
+    procedure SwitchUser(Sender: TObject) ;             // Changer d'utilisateur    
     { déclaration de la procédure qui interceptera les messages que windows envoie
       lorsqu'il veut se fermer à savoir WM_QUERYENDSESSION }
     procedure WMQueryEndSession(var Message: TWMQueryEndSession); message WM_QUERYENDSESSION;
@@ -264,8 +300,8 @@ type
 var
   Form1: TForm1;
   NouveauMenu : TMenuitem ;
-
-
+  osVer : OSVERSIONINFO ;
+  
 implementation
 
 {$R *.DFM}
@@ -381,6 +417,8 @@ begin
         then
             LancerAutoUser.Enabled := False ;
 
+        Registre.CloseKey ;
+
         { Lancer au démarrage de la session }
         Registre.RootKey := HKEY_CURRENT_USER ;
         Registre.OpenKey('Software\Microsoft\Windows\CurrentVersion\Run', True) ;
@@ -391,7 +429,8 @@ begin
         then
             LancerAutoOrdi.Enabled := False ;
 
-        Registre.CloseKey ;    
+        Registre.CloseKey ;
+            
         Registre.OpenKey('Software\Fast SysTray', True) ;
 
         { Fermer la fenêtre executer }
@@ -401,6 +440,15 @@ begin
         else begin
             CloseExecWindow.Checked := True ;
             Registre.WriteBool('MenuFermerFenetreExec', CloseExecWindow.Checked) ;
+        end ;
+
+        { Fermer la fenêtre executer }
+        if Registre.ValueExists('OpenInWindow')
+        then
+            OpenInWindow.Checked := Registre.ReadBool('OpenInWindow')
+        else begin
+            OpenInWindow.Checked := False ;
+            Registre.WriteBool('OpenInWindow', OpenInWindow.Checked) ;
         end ;
 
         { Position de la fenêtre Exécuter }
@@ -454,6 +502,8 @@ begin
             { Si on ne lance pas au démarrage de l'ordi on supprime la clef }
             Registre.DeleteValue('Fast SysTray') ;
 
+            Registre.CloseKey ;
+
             { Lancement au démarrage de la session }
             Registre.RootKey := HKEY_CURRENT_USER ;
             Registre.OpenKey('Software\Microsoft\Windows\CurrentVersion\Run', True) ;
@@ -468,6 +518,9 @@ begin
 
         Registre.CloseKey ;
         Registre.OpenKey('Software\Fast SysTray', True) ;
+
+        { Afficher les lecteurs et dossiers dans une fenêtre seule }
+        Registre.WriteBool('OpenInWindow', OpenInWindow.Checked) ;
 
         { Fermer la fenêtre executer }
         Registre.WriteBool('MenuFermerFenetreExec', CloseExecWindow.Checked) ;
@@ -550,6 +603,7 @@ procedure TForm1.SauveMenuConfig(Registre : TRegistry) ;
 begin
     { Menu Arrêter }
     Registre.WriteBool('MenuArreter', CocheMenuArreter.Checked) ;
+    
     { Menu Verrouiller }
     if @proc <> nil
     then
@@ -571,14 +625,31 @@ begin
     Registre.WriteBool('MenuCapturerEcran', CocheMenuCapturerEcran.Checked) ;
     { Menu Executer }
     Registre.WriteBool('MenuExecuter', CocheMenuExecuter.Checked) ;
-
+    { Menu Changer d'utilisateur }
+    Registre.WriteBool('MenuSwitchUser', CocheMenuSwitchUser.Checked) ;
 end ;
 
 {*******************************************************************************
- * Enregistre la config des menus dans la base de registre
+ * Litla config des menus dans la base de registre
  ******************************************************************************}
 procedure TForm1.LitMenuConfig(Registre : TRegistry) ;
 begin
+    { Menu Changer d'utilisateur }
+    if (osVer.dwMajorVersion > 5) or ((osVer.dwMajorVersion = 5) and (osVer.dwMinorVersion > 0))
+    then begin
+        if Registre.ValueExists('MenuSwitchUser')
+        then
+            CocheMenuSwitchUser.Checked := Registre.ReadBool('MenuSwitchUser')
+        else begin
+            CocheMenuSwitchUser.Checked := True ;
+            Registre.WriteBool('MenuSwitchUser', CocheMenuSwitchUser.Checked) ;
+        end ;
+    end
+    else begin
+        CocheMenuSwitchUser.Checked := False ;
+        CocheMenuSwitchUser.Enabled := False ;
+    end ;
+
     { Menu Arrêter }
     if Registre.ValueExists('MenuArreter')
     then
@@ -698,6 +769,10 @@ begin
 
             { Bug #1 }
             ListBoxRac.Items.Clear ;
+            { Bug #2 }
+            ListRacCmd.Clear ;
+            ListRacArg.Clear ;
+
             LitMesProgrammesConfig ;
         end
         else begin
@@ -833,10 +908,17 @@ end ;
  ******************************************************************************}
 procedure TForm1.AfficherLecteur(Sender: TObject) ;
 var lecteur : String ;
+    tmp : String ;
 begin
     lecteur := Chr(97 + TMenuItem(Sender).Tag) + ':\' ;
 
-    ShellExecute(Handle, 'EXPLORE', PChar(lecteur), '','',SW_SHOWNORMAL);
+    if OpenInWindow.Checked
+    then
+        tmp := 'OPEN'
+    else
+        tmp := 'EXPLORE' ;
+
+    ShellExecute(Handle, PChar(tmp), PChar(lecteur), '','',SW_SHOWNORMAL);
 end ;
 
 {*******************************************************************************
@@ -1073,6 +1155,7 @@ begin
     if Application.MessageBox('Etes-vous sûr de vouloir quitter Fast SysTray ?', 'Quitter', MB_YESNO or MB_ICONQUESTION) = IDYES
     then begin
         IWantReallyExit := True ;
+        SupprimeIcone ;
         Application.Terminate ;
     end ;
 end ;
@@ -1175,6 +1258,23 @@ begin
         NouveauMenu.OnClick := LoggOffWindows ;
         NouveauMenu.ImageIndex := 3 ;
         NouveauMenu.Name := 'MLogO' ;
+
+        NbList := NbList + 1 ;
+        SetLength(ListItemDuMenuPopUp, NbList) ;
+
+        ListItemDuMenuPopUp[NbList - 1] := NouveauMenu ;
+    end ;
+
+    if (CocheMenuSwitchUser.Checked = True)
+    then begin
+        Sep := True ;
+        
+        {** SwitchUser **}
+        NouveauMenu := TMenuItem.Create(Self);
+        NouveauMenu.Caption := 'Changer d''utilisateur' ;
+        NouveauMenu.OnClick := SwitchUser ;
+        NouveauMenu.ImageIndex := 12 ;
+        NouveauMenu.Name := 'MSwitchUser' ;
 
         NbList := NbList + 1 ;
         SetLength(ListItemDuMenuPopUp, NbList) ;
@@ -1315,8 +1415,7 @@ end;
  * Création de la feuille
  ******************************************************************************}
 procedure TForm1.FormCreate(Sender: TObject);
-Var osVer : OSVERSIONINFO ;
-    Registre : TRegistry ;
+Var Registre : TRegistry ;
     Fenetre : HWND ;
     handleProc : integer ;
 begin
@@ -1862,7 +1961,7 @@ begin
         Registre.OpenKey(CHEMIN_REGISTRE + '\ShortCut', True) ;
 
         { Enregistre, le nombre de raccourci }
-        Registre.WriteInteger('ShortCutCount', ListBoxRac.Items.Count - 1) ;
+        Registre.WriteInteger('ShortCutCount', ListBoxRac.Items.Count) ;
 
         { Enregistre les raccourcis }
         NBRac := ListBoxRac.Items.Count - 1 ;
@@ -1900,7 +1999,7 @@ begin
             if Registre.ValueExists('ShortCutCount')
             then begin
                 { Lit le nombre de raccourci }
-                Nb := Registre.ReadInteger('ShortCutCount') ;
+                Nb := Registre.ReadInteger('ShortCutCount') - 1 ;
 
                 { Lit les raccourcis }
                 for i := 0 to Nb do
@@ -2002,8 +2101,13 @@ begin
 
         { Si différent de 0, c'est un répertoire }
         if i <> 0
-        then
-            operation := 'EXPLORE'
+        then begin
+            if OpenInWindow.Checked
+            then
+                operation := 'OPEN'
+            else
+                operation := 'EXPLORE' ;
+        end
         else
             operation := 'OPEN' ;
     end
@@ -2164,5 +2268,183 @@ begin
     then
         Application.MessageBox('Impossible de lancer le module voulu. Veuillez réinstaller Fast SysTray.', 'Erreur', MB_OK + MB_ICONERROR) ;
 end ;
+
+{*******************************************************************************
+ * Exporte la config dans un INI
+ ******************************************************************************}
+procedure TForm1.ExporterConfigRaccourcisClick(Sender: TObject);
+Var ExportIni: TIniFile;
+    Section  : String ;
+    i : Integer ;
+    NBRac : Integer ;
+begin
+    if SaveDialog1.Execute
+    then begin
+        // suprime le fichier s'il existe
+        DeleteFile(SaveDialog1.FileName) ;
+
+        // Créer le fichier d'export
+        ExportIni := TIniFile.Create(SaveDialog1.FileName);
+
+        try
+            Section := 'Menus' ;
+
+            { Menu Arrêter }
+            ExportIni.WriteBool(Section, 'MenuArreter', CocheMenuArreter.Checked) ;
+            { Menu Verrouiller }
+            ExportIni.WriteBool(Section, 'MenuVerrouiller', CocheMenuVerrouiller.Checked) ;
+            { Menu Veille }
+            ExportIni.WriteBool(Section, 'MenuVeille', CocheMenuVeille.Checked) ;
+            { Menu RentrerDisques }
+            ExportIni.WriteBool(Section, 'MenuRentrerDisques', CocheMenuRentrerDisques.Checked) ;
+            { Menu EjecterDisques }
+            ExportIni.WriteBool(Section, 'MenuEjecterDisques', CocheMenuEjecterDisques.Checked) ;
+            { Menu Disques }
+            ExportIni.WriteBool(Section, 'MenuDisques', CocheMenuDisques.Checked) ;
+            { Menu Disques Label }
+            ExportIni.WriteBool(Section, 'MenuDisquesLabel', CocheMenuDisquesLabel.Checked) ;
+            { Menu Graphisme }
+            ExportIni.WriteBool(Section, 'MenuGraphisme', CocheMenuGraphisme.Checked) ;
+            { Menu Capturer Ecran }
+            ExportIni.WriteBool(Section, 'MenuCapturerEcran', CocheMenuCapturerEcran.Checked) ;
+            { Menu Executer }
+            ExportIni.WriteBool(Section, 'MenuExecuter', CocheMenuExecuter.Checked) ;
+            { Fermer la fenêtre executer }
+            ExportIni.WriteBool(Section, 'MenuFermerFenetreExec', CloseExecWindow.Checked) ;
+            { Menu Changer d'utilisateur }
+            ExportIni.WriteBool(Section, 'MenuSwitchUser', CocheMenuSwitchUser.Checked) ;
+
+
+            Section := 'General' ;
+
+            { Lancement au démarage de l'odinateur }
+            ExportIni.WriteBool(Section, 'RunAsLocalMachine', LancerAutoOrdi.Checked) ;
+            { Lancement au démarage de la session }
+            ExportIni.WriteBool(Section, 'RunAsUser', LancerAutoUser.Checked) ;
+            { Position de la fenêtre Exécuter }
+            ExportIni.WriteInteger(Section, 'PositionFenetreExec', ListePositionFenetreExec.ItemIndex) ;
+            { Raccourci dans le menu Démarrer }
+            ExportIni.WriteBool(Section, 'ShortCutInStartupMenu', RaccourciDemarrer.Checked) ;
+            { Raccourci dans le menu Démarrer }
+            ExportIni.WriteBool(Section, 'ShortCutInQuickLaunch', RaccourciLacementRapide.Enabled) ;
+            { Raccourci Bureau }
+            ExportIni.WriteBool(Section, 'ShortCutOnDesktop', RaccourciBureau.Checked) ;
+            { Afficher les lecteurs et dossiers dans une fenêtre seule }
+            ExportIni.WriteBool(Section, 'OpenInWindow', OpenInWindow.Checked) ;
+
+            Section := 'ShortCut' ;
+
+            { Enregistre, le nombre de raccourci }
+            ExportIni.WriteInteger(Section, 'ShortCutCount', ListBoxRac.Items.Count) ;
+
+            { Enregistre les raccourcis }
+            NBRac := ListBoxRac.Items.Count - 1 ;
+
+            for i := 0 to NBRac do
+            begin
+                ExportIni.WriteString(Section, 'ShortCut' + IntToStr(i), ListBoxRac.Items[i]) ;
+                ExportIni.WriteString(Section, 'ShortCutCmd' + IntToStr(i), ListRacCmd.Strings[i]) ;
+                ExportIni.WriteString(Section, 'ShortCutArg' + IntToStr(i), ListRacArg.Strings[i]) ;
+            end ;
+
+        finally
+            ExportIni.Free ;
+        end ;
+    end ;
+end;
+
+{*******************************************************************************
+ * Importe la config d'un INI
+ ******************************************************************************}
+procedure TForm1.ImporterConfigRaccourcisClick(Sender: TObject);
+Var ExportIni: TIniFile;
+    Section  : String ;
+    i : Integer ;
+    NBRac : Integer ;
+begin
+    if OpenDialog1.Execute
+    then begin
+        // Créer le fichier d'export
+        ExportIni := TIniFile.Create(OpenDialog1.FileName);
+
+        try
+            Section := 'Menus' ;
+
+            { Menu Arrêter }
+            CocheMenuArreter.Checked := ExportIni.ReadBool(Section, 'MenuArreter', True) ;
+            { Menu Verrouiller }
+            CocheMenuVerrouiller.Checked := ExportIni.ReadBool(Section, 'MenuVerrouiller', True) ;
+            { Menu Veille }
+            CocheMenuVeille.Checked := ExportIni.ReadBool(Section, 'MenuVeille', True) ;
+            { Menu RentrerDisques }
+            CocheMenuRentrerDisques.Checked := ExportIni.ReadBool(Section, 'MenuRentrerDisques', True) ;
+            { Menu EjecterDisques }
+            CocheMenuEjecterDisques.Checked := ExportIni.ReadBool(Section, 'MenuEjecterDisques', True) ;
+            { Menu Disques }
+            CocheMenuDisques.Checked := ExportIni.ReadBool(Section, 'MenuDisques', True) ;
+            { Menu Disques Label }
+            CocheMenuDisquesLabel.Checked := ExportIni.ReadBool(Section, 'MenuDisquesLabel', True) ;
+            { Menu Graphisme }
+            CocheMenuGraphisme.Checked := ExportIni.ReadBool(Section, 'MenuGraphisme', True) ;
+            { Menu Capturer Ecran }
+            CocheMenuCapturerEcran.Checked := ExportIni.ReadBool(Section, 'MenuCapturerEcran', True) ;
+            { Menu Executer }
+            CocheMenuExecuter.Checked := ExportIni.ReadBool(Section, 'MenuExecuter', True) ;
+            { Fermer la fenêtre executer }
+            CloseExecWindow.Checked := ExportIni.ReadBool(Section, 'MenuFermerFenetreExec', True) ;
+            { Menu Changer d'utilisateur }
+            CocheMenuSwitchUser.Checked := ExportIni.ReadBool(Section, 'MenuSwitchUser', True) ;
+
+            Section := 'General' ;
+
+            { Lancement au démarage de l'odinateur }
+            LancerAutoOrdi.Checked := ExportIni.ReadBool(Section, 'RunAsLocalMachine', False) ;
+            { Lancement au démarage de la session }
+            LancerAutoUser.Checked := ExportIni.ReadBool(Section, 'RunAsUser', True) ;
+            { Position de la fenêtre Exécuter }
+            ListePositionFenetreExec.ItemIndex := ExportIni.ReadInteger(Section, 'PositionFenetreExec', 0) ;
+            { Raccourci dans le menu Démarrer }
+            RaccourciDemarrer.Checked := ExportIni.ReadBool(Section, 'ShortCutInStartupMenu', True) ;
+            { Raccourci dans le menu Démarrer }
+            RaccourciLacementRapide.Enabled := ExportIni.ReadBool(Section, 'ShortCutInQuickLaunch', True) ;
+            { Raccourci Bureau }
+            RaccourciBureau.Checked := ExportIni.ReadBool(Section, 'ShortCutOnDesktop', True) ;
+            { Afficher les lecteurs et dossiers dans une fenêtre seule }
+            OpenInWindow.Checked := ExportIni.ReadBool(Section, 'OpenInWindow', False) ;
+
+            Section := 'ShortCut' ;
+
+            { Lit le nombre de raccourci }
+            NBRac := ExportIni.ReadInteger(Section, 'ShortCutCount', 0) - 1 ;
+
+            for i := 0 to NBRac do
+            begin
+                ListBoxRac.Items.Add(ExportIni.ReadString(Section, 'ShortCut' + IntToStr(i), 'Nothink'));
+                ListRacCmd.Add(ExportIni.ReadString(Section, 'ShortCutCmd' + IntToStr(i), 'is')) ;
+                ListRacArg.Add(ExportIni.ReadString(Section, 'ShortCutArg' + IntToStr(i), 'dead')) ;
+            end ;
+
+        finally
+            ExportIni.Free ;
+        end ;
+    end ;
+end;
+
+{*******************************************************************************
+ * Changer d'utilisateur
+ ******************************************************************************}
+procedure TForm1.SwitchUser(Sender: TObject) ;
+begin
+    // Simule l'appuie sur la touche WINDOWS + L
+    keybd_event(VK_LWIN, 0, 0, 0) ;
+    keybd_event($4C, 0, 0, 0) ;
+    keybd_event($4C, 0, KEYEVENTF_KEYUP, 0) ;
+    keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0) ;
+end ;
+
+procedure TForm1.ListBoxRacDblClick(Sender: TObject);
+begin
+    ModifierRacClick(Sender) ;
+end;
 
 end.
