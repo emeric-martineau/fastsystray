@@ -53,6 +53,17 @@
  *              - si on double clique sur un raccourci dans la liste des
  *                raccourcis, édite le raccourci en question.
  *              - mise à jour de la documentation.
+ *
+ * Version 1.1.2 :
+ *              - modification de l'icone de main,
+ *              - si on descendait un élément et qu'on arrivait en bout de liste,
+ *                une erreur apparaissait,
+ *              - correction des mélange de raccourci lorsqu'on montait et
+ *                descendait un élément dans la liste,
+ *              - suppression de la possibiliter de modifier une barre de
+ *                séparation,
+ *              - possibilité de fermer les fenêtres par la touche ECHAP (ESC),
+ *              - amélioration de l'instalation,
  *******************************************************************************
  *******************************************************************************
  * Liste des images pour les menus. Numéro d'index et à quoi elles correspondent
@@ -145,6 +156,12 @@
  *
  * Bug #2 : se mélangeait dans les raccourcis. Je ne vidais pas toutes les
  *          listes lorsque je les recréais.
+ *
+ * Bug #3 : quand on clique sur monter ou descendre dans la liste de raccourci,
+ *          on monte ou on descend de 2 crans.
+ *
+ * Bug #4 : quand on monte ou on descend et quand arrive à la fin de liste, on a
+ *         une erreur d'indice.
  *******************************************************************************
 }
 unit main;
@@ -300,8 +317,8 @@ type
 var
   Form1: TForm1;
   NouveauMenu : TMenuitem ;
-  osVer : OSVERSIONINFO ;
-  
+  OSInfos : OSVERSIONINFO ;
+
 implementation
 
 {$R *.DFM}
@@ -635,7 +652,7 @@ end ;
 procedure TForm1.LitMenuConfig(Registre : TRegistry) ;
 begin
     { Menu Changer d'utilisateur }
-    if (osVer.dwMajorVersion > 5) or ((osVer.dwMajorVersion = 5) and (osVer.dwMinorVersion > 0))
+    if (OSInfos.dwMajorVersion > 5) or ((OSInfos.dwMajorVersion = 5) and (OSInfos.dwMinorVersion > 0))
     then begin
         if Registre.ValueExists('MenuSwitchUser')
         then
@@ -1415,10 +1432,14 @@ end;
  * Création de la feuille
  ******************************************************************************}
 procedure TForm1.FormCreate(Sender: TObject);
-Var Registre : TRegistry ;
+Var osVer : OSVERSIONINFO ;
+    Registre : TRegistry ;
     Fenetre : HWND ;
     handleProc : integer ;
 begin
+    { Charge l'icone de la main de Windows plutôt que de delphi }
+    Screen.Cursors[crHandPoint] := LoadCursor(0, IDC_HAND);
+
     { Vérifie que la fonction LockWorkStation existe. Winodws NT seulement }
     HandleProc := LoadLibrary('user32.dll');
 
@@ -1479,6 +1500,9 @@ begin
     end ;
 
     AjouteIcone;
+
+    // Récupère les infos du système d'exploitation
+    GetVersionEx(OSInfos) ;
 end;
 
 {*******************************************************************************
@@ -1848,7 +1872,7 @@ Var status : Boolean ;
 begin
     { Par défaut les boutons sont désactivés }
     Status := False ;
-    
+
     if (ListBoxRac.ItemIndex <> -1) and (ListBoxRac.Items.Count > 0)
     then
         Status := True ;
@@ -1923,10 +1947,15 @@ procedure TForm1.MonterRacClick(Sender: TObject);
 begin
     if ListBoxRac.ItemIndex > 0
     then begin
-        ListBoxRac.Items.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
         ListRacCmd.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
         ListRacArg.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
+        { Bug #4 : on changeait avant }
+        ListBoxRac.Items.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
+
+        { Bug #3
         ListBoxRac.ItemIndex := ListBoxRac.ItemIndex - 1 ;
+        }
+
         ListBoxRacClick(Sender) ;
     end ;
 end;
@@ -1938,10 +1967,15 @@ procedure TForm1.DescendreRacClick(Sender: TObject);
 begin
     if (ListBoxRac.ItemIndex <> -1) and (ListBoxRac.ItemIndex < (ListBoxRac.Items.Count - 1))
     then begin
-        ListBoxRac.Items.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
         ListRacCmd.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
         ListRacArg.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
+        { Bug #4 }
+        ListBoxRac.Items.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
+        
+        { Bug #3
         ListBoxRac.ItemIndex := ListBoxRac.ItemIndex + 1 ;
+        }
+        
         ListBoxRacClick(Sender) ;
     end ;
 end;
@@ -2444,7 +2478,9 @@ end ;
 
 procedure TForm1.ListBoxRacDblClick(Sender: TObject);
 begin
-    ModifierRacClick(Sender) ;
+    if ListRacCmd.Strings[ListBoxRac.ItemIndex] <> ''
+    then
+        ModifierRacClick(Sender) ;
 end;
 
 end.

@@ -1,0 +1,8 @@
+Problèmes connus
+----------------
+ * Firewall de Panda Platinium Security
+     Il a été reporté que Fast SysTray désactive le firewall. 
+
+  * Copie d'écran
+      Le déclenchement de la copie d'écran avec une touche clavier ou le clique droit de la souris ne fonctionne pas toujours.
+      En effet, si la touche est associé ou s'il y a un menu surgissant, la copie d'écran ne se fait pas. 
