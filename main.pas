@@ -3,7 +3,7 @@
  *
  * Fast SysTray
  *
- * Version 1.1.1
+ * Version 1.1.3
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software
@@ -64,6 +64,15 @@
  *                séparation,
  *              - possibilité de fermer les fenêtres par la touche ECHAP (ESC),
  *              - amélioration de l'instalation,
+ *
+ * Version 1.1.3 :
+ *              - correction d'un bug qui empêchait le switch user,
+ *              - correction du répertoire par défaut au lancement d'une
+ *                application qui faisait créer des fichiers ini dans le
+ *                répertoire de FST.
+ *              - possibilité de mettre le menu FST en haut du menu,
+ *              - possibilité de ne pas confirmer lorsqu'on arrête, redémarre
+ *                Windows,
  *******************************************************************************
  *******************************************************************************
  * Liste des images pour les menus. Numéro d'index et à quoi elles correspondent
@@ -147,6 +156,18 @@
  *    5 : au milieu de l'écran (poScreenCenter)
  *    6 : laisser Windows positionner la fenêtre (poDefaultPosOnly)
  *
+ * \Software\Fast SysTray\ShowMenuFSTOnTop (DWORD)
+ * -> 0 : menu en bas
+ *    1 : menu en haut
+ *
+ * \Software\Fast SysTray\NoConfirmStopWindows (DWORD)
+ * -> 0 : confirmation
+ *    1 : pas de confirmation pour l'arrêt de windows
+ *
+ * \Software\Fast SysTray\MenuShowDesktop (DWORD)
+ * -> 0 : affiche pas
+ *    1 : affice
+ *
  *******************************************************************************
  *******************************************************************************
  * BUG résolus
@@ -180,7 +201,7 @@ const
   { Utilise pour ExitWindowsEx pour Windows 2003 }
   SHTDN_REASON_MAJOR_APPLICATION  = $00040000 ;
   { Message indiquant que le theme sous Winodws XP change }
-  WM_THEMECHANGED = 794 ;  
+  WM_THEMECHANGED = 794 ;
 
 type
   TForm1 = class(TForm)
@@ -215,7 +236,6 @@ type
     GroupBoxMenu3: TGroupBox;
     CocheMenuCapturerEcran: TCheckBox;
     CocheMenuExecuter: TCheckBox;
-    CocheMenuGraphisme: TCheckBox;
     Label1: TLabel;
     Label2: TLabel;
     Label3: TLabel;
@@ -232,6 +252,11 @@ type
     OpenDialog1: TOpenDialog;
     OpenInWindow: TCheckBox;
     CocheMenuSwitchUser: TCheckBox;
+    GroupBox2: TGroupBox;
+    CocheMenuGraphisme: TCheckBox;
+    ShowMenuFSTOnTop: TCheckBox;
+    NoConfirmStopWindows: TCheckBox;
+    CocheMenuShowDesktop: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure BoutonEnregistrerConfigurationClick(Sender: TObject);
@@ -281,7 +306,8 @@ type
     procedure RentrerLecteur(Sender: TObject) ;         // Rentre le lecteur
     procedure EcranDeVeilleWindows(Sender: TObject) ;   // Ecran de veille
     procedure MiseEnVeilleWindows(Sender: TObject) ;    // Mise en veille
-    procedure SwitchUser(Sender: TObject) ;             // Changer d'utilisateur    
+    procedure SwitchUser(Sender: TObject) ;             // Changer d'utilisateur
+    procedure ShowDesktop(Sender: TObject) ;            // Affiche le bureau       
     { déclaration de la procédure qui interceptera les messages que windows envoie
       lorsqu'il veut se fermer à savoir WM_QUERYENDSESSION }
     procedure WMQueryEndSession(var Message: TWMQueryEndSession); message WM_QUERYENDSESSION;
@@ -477,6 +503,23 @@ begin
             Registre.WriteInteger('PositionFenetreExec', ListePositionFenetreExec.ItemIndex) ;
         end ;
 
+        { Position du menu }
+        if Registre.ValueExists('ShowMenuFSTOnTop')
+        then
+            ShowMenuFSTOnTop.Checked := Registre.ReadBool('ShowMenuFSTOnTop')
+        else begin
+            ShowMenuFSTOnTop.Checked := False ;
+            Registre.WriteBool('ShowMenuFSTOnTop', False) ;
+        end ;
+
+        { Confirmation de l'arrêt de windows }
+        if Registre.ValueExists('NoConfirmStopWindows')
+        then
+            NoConfirmStopWindows.Checked := Registre.ReadBool('NoConfirmStopWindows')
+        else begin
+            NoConfirmStopWindows.Checked := False ;
+            Registre.WriteBool('NoConfirmStopWindows', False) ;
+        end ;
 
         Registre.CloseKey ;
     finally
@@ -544,6 +587,12 @@ begin
 
         { Position de la fenêtre Exécuter }
         Registre.WriteInteger('PositionFenetreExec', ListePositionFenetreExec.ItemIndex) ;
+
+        { Menu en haut }
+        Registre.WriteBool('ShowMenuFSTOnTop', ShowMenuFSTOnTop.Checked) ;
+
+        { Menu en haut }
+        Registre.WriteBool('NoConfirmStopWindows', NoConfirmStopWindows.Checked) ;
 
         Registre.CloseKey ;
     finally
@@ -644,6 +693,9 @@ begin
     Registre.WriteBool('MenuExecuter', CocheMenuExecuter.Checked) ;
     { Menu Changer d'utilisateur }
     Registre.WriteBool('MenuSwitchUser', CocheMenuSwitchUser.Checked) ;
+    { Menu Bureau }
+    Registre.WriteBool('MenuShowDesktop', CocheMenuShowDesktop.Checked) ;
+
 end ;
 
 {*******************************************************************************
@@ -665,6 +717,14 @@ begin
     else begin
         CocheMenuSwitchUser.Checked := False ;
         CocheMenuSwitchUser.Enabled := False ;
+    end ;
+
+    if Registre.ValueExists('MenuShowDesktop')
+    then
+        CocheMenuShowDesktop.Checked := Registre.ReadBool('MenuShowDesktop')
+    else begin
+        CocheMenuShowDesktop.Checked := True ;
+        Registre.WriteBool('MenuShowDesktop', CocheMenuShowDesktop.Checked) ;
     end ;
 
     { Menu Arrêter }
@@ -935,7 +995,7 @@ begin
     else
         tmp := 'EXPLORE' ;
 
-    ShellExecute(Handle, PChar(tmp), PChar(lecteur), '','',SW_SHOWNORMAL);
+    ShellExecute(Handle, PChar(tmp), PChar(lecteur), '', PChar(tmp),SW_SHOWNORMAL);
 end ;
 
 {*******************************************************************************
@@ -1162,6 +1222,12 @@ begin
     SetLength(ListItemDuMenuPopUp, NbList) ;
 
     ListItemDuMenuPopUp[NbList - 1] := NouveauMenu ;
+
+    if ShowMenuFSTOnTop.Checked
+    then begin
+        {** barre de séparation **}
+        ajouterMenuSeparateur ;
+    end
 end ;
 
 {*******************************************************************************
@@ -1189,35 +1255,47 @@ end ;
  * Eteind l'ordinateur
  ******************************************************************************}
 procedure TForm1.ShutDownWindows(Sender: TObject) ;
-var osVer: OSVERSIONINFO;
-begin
-    if Application.MessageBox('Etes-vous sûr de vouloir arrêter Windows ?', 'Arrêt de Windows', MB_YESNO or MB_ICONQUESTION) = IDYES
-    then
+    procedure stopLocal ;
+    begin
         if tokenPrivilege()
         then begin
-            osVer.dwOSVersionInfoSize := Sizeof(osVer);
-            GetVersionEx(osVer);
-
             { test pour la version de windows (9x ou XP) }
-            if osVer.dwPlatformId = VER_PLATFORM_WIN32_WINDOWS
+            if OSInfos.dwPlatformId = VER_PLATFORM_WIN32_WINDOWS
             then
                 ExitWindowsEx(EWX_SHUTDOWN or EWX_FORCEIFHUNG , 0) // 95
             else
                 ExitWindowsEx(EWX_POWEROFF or EWX_FORCEIFHUNG , SHTDN_REASON_MAJOR_APPLICATION) ;
         end ;
+    end ;
+begin
+    if NoConfirmStopWindows.Checked
+    then
+        stopLocal
+    else
+        if Application.MessageBox('Etes-vous sûr de vouloir arrêter Windows ?', 'Arrêt de Windows', MB_YESNO or MB_ICONQUESTION) = IDYES
+        then
+            stopLocal
 end ;
 
 {*******************************************************************************
  * Redémarrer l'ordinateur
  ******************************************************************************}
 procedure TForm1.RebootWindows(Sender: TObject) ;
-begin
-    if Application.MessageBox('Etes-vous sûr de vouloir redémarrer Windows ?', 'Redémarrer de Windows', MB_YESNO or MB_ICONQUESTION) = IDYES
-    then
+    procedure stopLocal ;
+    begin
         if tokenPrivilege()
         then begin
             ExitWindowsEx(EWX_REBOOT or EWX_FORCEIFHUNG, SHTDN_REASON_MAJOR_APPLICATION) ;
         end ;
+    end ;
+begin
+    if NoConfirmStopWindows.Checked
+    then
+        stopLocal
+    else
+        if Application.MessageBox('Etes-vous sûr de vouloir redémarrer Windows ?', 'Redémarrer de Windows', MB_YESNO or MB_ICONQUESTION) = IDYES
+        then
+            stopLocal ;
 end ;
 
 {*******************************************************************************
@@ -1225,9 +1303,13 @@ end ;
  ******************************************************************************}
 procedure TForm1.LoggOffWindows(Sender: TObject) ;
 begin
-    if Application.MessageBox('Etes-vous sûr de vouloir redémarrer Windows ?', 'Redémarrer de Windows', MB_YESNO or MB_ICONQUESTION) = IDYES
+    if NoConfirmStopWindows.Checked
     then
-        ExitWindowsEx(EWX_LOGOFF or EWX_FORCEIFHUNG, SHTDN_REASON_MAJOR_APPLICATION) ;
+        ExitWindowsEx(EWX_LOGOFF or EWX_FORCEIFHUNG, SHTDN_REASON_MAJOR_APPLICATION)
+    else
+        if Application.MessageBox('Etes-vous sûr de vouloir fermer votre session Windows ?', 'Fermeture de session', MB_YESNO or MB_ICONQUESTION) = IDYES
+        then
+            ExitWindowsEx(EWX_LOGOFF or EWX_FORCEIFHUNG, SHTDN_REASON_MAJOR_APPLICATION) ;
 end ;
 
 {*******************************************************************************
@@ -1285,7 +1367,7 @@ begin
     if (CocheMenuSwitchUser.Checked = True)
     then begin
         Sep := True ;
-        
+
         {** SwitchUser **}
         NouveauMenu := TMenuItem.Create(Self);
         NouveauMenu.Caption := 'Changer d''utilisateur' ;
@@ -1363,6 +1445,23 @@ begin
         ListItemDuMenuPopUp[NbList - 1] := NouveauMenu ;
     end ;
 
+    if (CocheMenuShowDesktop.Checked = True)
+    then begin
+        Sep := True ;
+
+        {** ShowUser **}
+        NouveauMenu := TMenuItem.Create(Self);
+        NouveauMenu.Caption := 'Bureau' ;
+        NouveauMenu.OnClick := ShowDesktop ;
+        NouveauMenu.ImageIndex := 13 ;
+        NouveauMenu.Name := 'MShowDesktop' ;
+
+        NbList := NbList + 1 ;
+        SetLength(ListItemDuMenuPopUp, NbList) ;
+
+        ListItemDuMenuPopUp[NbList - 1] := NouveauMenu ;
+    end ;
+
     { Ajoute un séparateur }
     if Sep = True
     then
@@ -1432,11 +1531,14 @@ end;
  * Création de la feuille
  ******************************************************************************}
 procedure TForm1.FormCreate(Sender: TObject);
-Var osVer : OSVERSIONINFO ;
+Var
     Registre : TRegistry ;
     Fenetre : HWND ;
     handleProc : integer ;
 begin
+    OSInfos.dwOSVersionInfoSize := Sizeof(OSInfos);
+    GetVersionEx(OSInfos);
+
     { Charge l'icone de la main de Windows plutôt que de delphi }
     Screen.Cursors[crHandPoint] := LoadCursor(0, IDC_HAND);
 
@@ -1475,11 +1577,8 @@ begin
     { Lit la config }
     LireEnregistrerConfig(True) ;
 
-    osVer.dwOSVersionInfoSize := Sizeof(osVer);
-    GetVersionEx(osVer);
-
     { test pour la version de windows (9x ou XP) }
-    if osVer.dwPlatformId = VER_PLATFORM_WIN32_WINDOWS
+    if OSInfos.dwPlatformId = VER_PLATFORM_WIN32_WINDOWS
     then
         CocheMenuVerrouiller.Enabled := False ; // Windows 9x
 
@@ -1500,9 +1599,6 @@ begin
     end ;
 
     AjouteIcone;
-
-    // Récupère les infos du système d'exploitation
-    GetVersionEx(OSInfos) ;
 end;
 
 {*******************************************************************************
@@ -1561,6 +1657,11 @@ begin
 
     { Initialise le pointeur du tableau à 0}
     NbList := 0 ;
+    
+    { Ajoute le menu de l'application }
+    if ShowMenuFSTOnTop.Checked = True
+    then
+        ajouterMenuFastSysTray ;
 
     { ajoutes Mes Programmes }
     ajouterMesProgrammes ;
@@ -1582,7 +1683,9 @@ begin
         ajouterMenuOutils ;
 
     { Ajoute le menu de l'application }
-    ajouterMenuFastSysTray ;
+    if ShowMenuFSTOnTop.Checked = False
+    then
+        ajouterMenuFastSysTray ;
 
     { Créer le menu PopUp }
     NewPopUpMenu1 := NewPopupMenu(Self, 'MonMenu', paLeft, True, ListItemDuMenuPopUp) ;
@@ -2151,7 +2254,7 @@ begin
     { Lance la commande. On ne fait pas une ligne spécifique car il n'y a pas
       d'argument donc on ne passe rien forcément }
     case ShellExecute(Handle, Pchar(operation), PChar(msg),
-             PChar(ListRacArg.Strings[TMenuItem(Sender).Tag]),'',SW_SHOWNORMAL)
+             PChar(ListRacArg.Strings[TMenuItem(Sender).Tag]), PChar(ExtractFileDir(msg)),SW_SHOWNORMAL)
     of
         0                    : msg := 'Pas assez de mémoire disponible.' ;
         ERROR_FILE_NOT_FOUND : msg := 'Fichier introuvable.' ;
@@ -2347,6 +2450,8 @@ begin
             ExportIni.WriteBool(Section, 'MenuFermerFenetreExec', CloseExecWindow.Checked) ;
             { Menu Changer d'utilisateur }
             ExportIni.WriteBool(Section, 'MenuSwitchUser', CocheMenuSwitchUser.Checked) ;
+            { Menu Bureau }
+            ExportIni.WriteBool(Section, 'MenuShowDesktop', CocheMenuShowDesktop.Checked) ;
 
 
             Section := 'General' ;
@@ -2365,6 +2470,10 @@ begin
             ExportIni.WriteBool(Section, 'ShortCutOnDesktop', RaccourciBureau.Checked) ;
             { Afficher les lecteurs et dossiers dans une fenêtre seule }
             ExportIni.WriteBool(Section, 'OpenInWindow', OpenInWindow.Checked) ;
+            { Raccourci ShowMenuFSTOnTop }
+            ExportIni.WriteBool(Section, 'ShowMenuFSTOnTop', ShowMenuFSTOnTop.Checked) ;
+            { Raccourci NoConfirmStopWindows }
+            ExportIni.WriteBool(Section, 'NoConfirmStopWindows', NoConfirmStopWindows.Checked) ;
 
             Section := 'ShortCut' ;
 
@@ -2428,6 +2537,8 @@ begin
             CloseExecWindow.Checked := ExportIni.ReadBool(Section, 'MenuFermerFenetreExec', True) ;
             { Menu Changer d'utilisateur }
             CocheMenuSwitchUser.Checked := ExportIni.ReadBool(Section, 'MenuSwitchUser', True) ;
+            { Menu Bureau }
+            CocheMenuShowDesktop.Checked := ExportIni.ReadBool(Section, 'MenuShowDesktop', True) ;
 
             Section := 'General' ;
 
@@ -2445,6 +2556,10 @@ begin
             RaccourciBureau.Checked := ExportIni.ReadBool(Section, 'ShortCutOnDesktop', True) ;
             { Afficher les lecteurs et dossiers dans une fenêtre seule }
             OpenInWindow.Checked := ExportIni.ReadBool(Section, 'OpenInWindow', False) ;
+            { Raccourci ShowMenuFSTOnTop }
+            ShowMenuFSTOnTop.Checked := ExportIni.ReadBool(Section, 'ShowMenuFSTOnTop', False) ;
+            { Raccourci NoConfirmStopWindows }
+            NoConfirmStopWindows.Checked := ExportIni.ReadBool(Section, 'NoConfirmStopWindows', False) ;
 
             Section := 'ShortCut' ;
 
@@ -2473,6 +2588,18 @@ begin
     keybd_event(VK_LWIN, 0, 0, 0) ;
     keybd_event($4C, 0, 0, 0) ;
     keybd_event($4C, 0, KEYEVENTF_KEYUP, 0) ;
+    keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0) ;
+end ;
+
+{*******************************************************************************
+ * Changer d'utilisateur
+ ******************************************************************************}
+procedure TForm1.ShowDesktop(Sender: TObject) ;
+begin
+    // Simule l'appuie sur la touche WINDOWS + M
+    keybd_event(VK_LWIN, 0, 0, 0) ;
+    keybd_event($4D, 0, 0, 0) ;
+    keybd_event($4D, 0, KEYEVENTF_KEYUP, 0) ;
     keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0) ;
 end ;
 

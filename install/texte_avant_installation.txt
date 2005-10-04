@@ -6,10 +6,8 @@ Ce programme vous est fournit SANS AUCUNES GARANTIES. En aucun cas l'auteur ne p
 L'utilitaire d'installation et de désinstallation N'EST PAS de l'auteur. L'auteur utilise le programme "Inno Setup" (http://www.innosetup.com/).
 L'auteur ne peut être tenu pour responsable des dommages causés par ce programme.
 
-Modification de la version 1.1.2 :
-- modification de l'icone de main,
-- si on descendait un élément et qu'on arrivait en bout de liste, une erreur apparaissait,
-- correction des mélange de raccourci lorsqu'on montait et descendait un élément dans la liste,
-- suppression de la possibiliter de modifier une barre de séparation,
-- possibilité de fermer les fenêtres par la touche ECHAP (ESC),
-- amélioration de l'instalation.
+Modification de la version 1.1.3 :
+ - correction d'un bug qui empêchait le switch user,
+ - correction du répertoire par défaut au lancement d'une application qui faisait créer des fichiers ini dans le répertoire de FST,
+ - possibilité de mettre le menu FST en haut du menu,
+ - possibilité de ne pas confirmer lorsqu'on arrête, redémarre Windows,

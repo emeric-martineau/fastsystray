@@ -1,6 +1,6 @@
 [Setup]
 AppName=Fast SysTray
-AppVerName=Fast SysTray 1.1.2
+AppVerName=Fast SysTray 1.1.3
 DefaultDirName={pf}\FastSysTray
 DefaultGroupName=Fast SysTray
 UninstallDisplayIcon={uninstallexe}
@@ -53,7 +53,7 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run\Fast SysTray"
 [Code]
 procedure AboutButtonOnClick(Sender: TObject);
 begin
-  MsgBox('Système d''instalation de Fast SysTray.'#13#10#13#10'Le système d''installation à été créé grâce à Inno Setup (http://www.innosetup.com).', mbInformation, mb_Ok) ;
+  MsgBox('Système d''instalation de Fast SysTray.'#13#10#13#10'Le système d''installation a été créé grâce à Inno Setup (http://www.innosetup.com).', mbInformation, mb_Ok) ;
 end;
 
 procedure InitializeWizard();
