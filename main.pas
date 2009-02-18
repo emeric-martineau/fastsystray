@@ -73,6 +73,12 @@
  *              - possibilité de mettre le menu FST en haut du menu,
  *              - possibilité de ne pas confirmer lorsqu'on arrête, redémarre
  *                Windows,
+ *
+ * Version 1.1.4 :
+ *              - ajout de la possibilité de spécifier une icône,
+ *              - support des variables d'environnement dans le nom du programme
+ *                , dans les arguments et le chemin d'îcone,
+ *              - suppression dans la base de registre des raccourcis supprimés,
  *******************************************************************************
  *******************************************************************************
  * Liste des images pour les menus. Numéro d'index et à quoi elles correspondent
@@ -278,7 +284,9 @@ type
     procedure ListBoxRacDblClick(Sender: TObject);
   public
     ListRacCmd : TStringList ;                          // Liste contenant les commandes des raccourcis du menu
-    ListRacArg : TStringList ;                          // Liste contenant les arguments de la ligne de commandes des raccourcis du menu    
+    ListRacArg : TStringList ;                          // Liste contenant les arguments de la ligne de commandes des raccourcis du menu
+    ListRacIco : TStringList ;                          // Liste contenant les icones des raccourcis
+    function ConvertirVariableDEnvironnement(Chaine : String) : String ;    
   private
     { Déclarations privées}
     NewPopUpMenu1 : TPopupMenu ;                        // contient le menu PopUp
@@ -289,7 +297,8 @@ type
     ListItemRentrerDisque : array of TMenuitem ;        // Contient les menus pour rentrer les disques
     NbListjecterDisque : Integer ;                      // Pointeur sur la dernière entrée du menu
     IconData: TNotifyIconData;                          // structure contenant les données pour l'icone
-    proc: function : BOOL; stdcall;                      // Pointe sur la fonction LockWorkStation
+    proc: function : BOOL; stdcall;                     // Pointe sur la fonction LockWorkStation
+    NombreDeRaccourciSupprime : Integer ;               // Indique le nombre de lien supprime pour vider la base de registre
     procedure ajouterMenuArretWindows ;                 // Ajoute le menu arrêt windows
     procedure ajouterMenuFastSysTray ;                  // ajoute le menu de l'application
     procedure ajouterMenuSeparateur ;                   // Ajoute un séparateur dans le menu
@@ -849,6 +858,7 @@ begin
             { Bug #2 }
             ListRacCmd.Clear ;
             ListRacArg.Clear ;
+            ListRacIco.Clear ;
 
             LitMesProgrammesConfig ;
         end
@@ -1566,6 +1576,7 @@ begin
     { Créer la liste des commandes }
     ListRacCmd := TStringList.Create() ;
     ListRacArg := TStringList.Create() ;
+    ListRacIco := TStringList.Create() ;
 
     if @proc = nil
     then
@@ -1949,7 +1960,12 @@ procedure TForm1.AjouterRacClick(Sender: TObject);
 Var BoiteCreerRacourci : TCreerRaccourci ;
 begin
     BoiteCreerRacourci := TCreerRaccourci.Create(Self) ;
-    BoiteCreerRacourci.ShowModal ;
+
+    if BoiteCreerRacourci.ShowModal = mrOK
+    then begin
+        Dec(NombreDeRaccourciSupprime) ;
+    end ;
+
     BoiteCreerRacourci.Free ;
 end;
 
@@ -2007,7 +2023,8 @@ procedure TForm1.ajouterSeparateurClick(Sender: TObject);
 begin
     ListBoxRac.Items.Add('- Barre de séparation -') ;
     ListRacCmd.Add('') ;
-    ListRacArg.Add('') ;    
+    ListRacArg.Add('') ;
+    ListRacIco.Add('') ;   
 end;
 
 {*******************************************************************************
@@ -2021,6 +2038,7 @@ begin
         then begin
             ListRacCmd.Delete(ListBoxRac.ItemIndex) ;
             ListRacArg.Delete(ListBoxRac.ItemIndex) ;
+            ListRacIco.Delete(ListBoxRac.ItemIndex);
             { A mettre après car décrément imédiatement ItemIndex }
             ListBoxRac.Items.Delete(ListBoxRac.ItemIndex) ;
             ListBoxRacClick(Sender) ;
@@ -2040,6 +2058,9 @@ begin
                 SendMessage(ListBoxRac.Handle, WM_KEYDOWN, 32, 0) ;
                 SendMessage(ListBoxRac.Handle, WM_KEYUP, 32, 0) ;
             end ;
+
+            { Incremente le nombre de lien supprimé pour vider la base de registre }
+            Inc(NombreDeRaccourciSupprime) ;
         end ;
 end;
 
@@ -2052,6 +2073,8 @@ begin
     then begin
         ListRacCmd.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
         ListRacArg.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
+        ListRacIco.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
+        
         { Bug #4 : on changeait avant }
         ListBoxRac.Items.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex - 1) ;
 
@@ -2072,6 +2095,8 @@ begin
     then begin
         ListRacCmd.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
         ListRacArg.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
+        ListRacIco.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
+
         { Bug #4 }
         ListBoxRac.Items.Exchange(ListBoxRac.ItemIndex, ListBoxRac.ItemIndex + 1) ;
         
@@ -2108,7 +2133,20 @@ begin
             Registre.WriteString('ShortCut' + IntToStr(i), ListBoxRac.Items[i]) ;
             Registre.WriteString('ShortCutCmd' + IntToStr(i), ListRacCmd.Strings[i]) ;
             Registre.WriteString('ShortCutArg' + IntToStr(i), ListRacArg.Strings[i]) ;
+            Registre.WriteString('ShortCutIco' + IntToStr(i), ListRacIco.Strings[i]) ;
         end ;
+
+        // Supprime les anciens raccourcis
+        for i := NBRac + 1 to NBRac + NombreDeRaccourciSupprime do
+        begin
+            Registre.DeleteValue('ShortCut' + IntToStr(i)) ;
+            Registre.DeleteValue('ShortCutCmd' + IntToStr(i)) ;
+            Registre.DeleteValue('ShortCutArg' + IntToStr(i)) ;
+            Registre.DeleteValue('ShortCutIco' + IntToStr(i)) ;
+        end ;
+
+        { Réinitialise le compteur }
+        NombreDeRaccourciSupprime := 0 ;
 
         Registre.CloseKey ;
     finally
@@ -2143,10 +2181,13 @@ begin
                 begin
                     ListRacCmd.Add(Registre.ReadString('ShortCutCmd' + IntToStr(i))) ;
                     ListRacArg.Add(Registre.ReadString('ShortCutArg' + IntToStr(i))) ;
+                    ListRacIco.Add(Registre.ReadString('ShortCutIco' + IntToStr(i))) ;
                     ListBoxRac.Items.Add(Registre.ReadString('ShortCut' + IntToStr(i))) ;
                 end ;
             end ;
         end ;
+
+        NombreDeRaccourciSupprime := 0 ;
 
         Registre.CloseKey ;
     finally
@@ -2162,6 +2203,9 @@ Var i : Integer ;
     Bmp1 : TBitmap ;
     ShInfo1 : SHFILEINFO ;
     NBRac : Integer ;
+    FileIconeName : String ;
+    Icone : TIcon ;
+    Programme : String ;
 begin
     { Créer le BMP }
     Bmp1 := TBitmap.Create() ;
@@ -2172,6 +2216,9 @@ begin
     Bmp1.Transparent := True ;
     Bmp1.Width := 16;
     Bmp1.Height := 16;
+
+    { Creer un objet icone }
+    Icone := TIcon.Create() ;
 
     NBRac := ListBoxRac.Items.Count - 1 ;
 
@@ -2184,11 +2231,32 @@ begin
             { Efface l'icone pour le prochaine icone }
             Bmp1.Canvas.Rectangle(0, 0, 16, 16) ;
 
-            { Récupère les informations liés au lecteur }
-            SHGetFileInfo(PChar(ListRacCmd.Strings[i]), 0, ShInfo1, sizeOF(SHFILEINFO), SHGFI_ICON or SHGFI_SMALLICON) ;
+            { Recupere l'icone }
+            if (ListRacIco.Strings[i] = '')
+            then begin
+                Programme := ConvertirVariableDEnvironnement(ListRacCmd.Strings[i]) ;
+                SHGetFileInfo(PChar(Programme), 0, ShInfo1, sizeOF(SHFILEINFO), SHGFI_ICON or SHGFI_SMALLICON) ;
 
-            { Dessine l'icône }
-            DrawIconEx(Bmp1.Canvas.Handle, 0, 0, ShInfo1.hIcon, 0, 0, 0, 0, DI_NORMAL) ;
+                { Dessine l'icône }
+                DrawIconEx(Bmp1.Canvas.Handle, 0, 0, ShInfo1.hIcon, 0, 0, 0, 0, DI_NORMAL) ;
+            end
+            else begin
+                if FileExists(ListRacIco.Strings[i])
+                then begin
+                    FileIconeName := ConvertirVariableDEnvironnement(ListRacIco.Strings[i]) ;
+
+                    if UpperCase(ExtractFileExt(FileIconeName)) = '.BMP'
+                    then begin
+                        Bmp1.LoadFromFile(FileIconeName) ;
+                    end
+                    else begin
+                        Icone.LoadFromFile(FileIconeName) ;
+
+                        { Dessine l'icône }
+                        DrawIconEx(Bmp1.Canvas.Handle, 0, 0, Icone.Handle, 0, 0, 0, 0, DI_NORMAL) ;
+                    end ;
+                end ;
+            end ;
 
             NouveauMenu.Caption := ListBoxRac.Items[i] ;
             NouveauMenu.OnClick := LancerMesProgrammes ;
@@ -2209,6 +2277,7 @@ begin
     end ;
 
     Bmp1.Free ;
+    Icone.Free ;
 
     if ListBoxRac.Items.Count > 0
     then
@@ -2220,6 +2289,7 @@ end ;
  ******************************************************************************}
 procedure TForm1.LancerMesProgrammes(Sender: TObject) ;
 Var msg : String ;
+    args : String ;
     i : Integer ;
     operation : String ;
 begin
@@ -2227,6 +2297,10 @@ begin
       messages d'erreur }
     msg := ListRacCmd.Strings[TMenuItem(Sender).Tag] ;
 
+    { Converti les éventuelles variables d'environnement }
+    msg := ConvertirVariableDEnvironnement(msg) ;
+    args := ConvertirVariableDEnvironnement(ListRacArg.Strings[TMenuItem(Sender).Tag]) ;
+    
     { On récupère les attributs du fichier }
     i := FileGetAttr(msg) ;
 
@@ -2254,7 +2328,7 @@ begin
     { Lance la commande. On ne fait pas une ligne spécifique car il n'y a pas
       d'argument donc on ne passe rien forcément }
     case ShellExecute(Handle, Pchar(operation), PChar(msg),
-             PChar(ListRacArg.Strings[TMenuItem(Sender).Tag]), PChar(ExtractFileDir(msg)),SW_SHOWNORMAL)
+             PChar(args), PChar(ExtractFileDir(msg)),SW_SHOWNORMAL)
     of
         0                    : msg := 'Pas assez de mémoire disponible.' ;
         ERROR_FILE_NOT_FOUND : msg := 'Fichier introuvable.' ;
@@ -2609,5 +2683,43 @@ begin
     then
         ModifierRacClick(Sender) ;
 end;
+
+{*******************************************************************************
+ * Changer d'utilisateur
+ ******************************************************************************}
+function TForm1.ConvertirVariableDEnvironnement(Chaine : String) : String ;
+Var variable : String ;
+    nouvelleChaine : String ;
+    inVar : Boolean ;
+    indexChaine : Integer ;
+begin
+    nouvelleChaine := '' ;
+    inVar := False ;
+
+    for indexChaine := 1 to Length(Chaine) do
+    begin
+        if (Chaine[indexChaine] = '%') and (inVar = False)
+        then begin
+            inVar := True ;
+            variable := '' ;
+        end
+        else if (Chaine[indexChaine] = '%') and (inVar = True)
+        then begin
+            inVar := False ;
+            nouvelleChaine := nouvelleChaine + GetEnvironmentVariable(variable) ;
+        end
+        else begin
+            if inVar = True
+            then begin
+                variable := variable + Chaine[indexChaine] ;
+            end
+            else begin
+                nouvelleChaine := nouvelleChaine + Chaine[indexChaine] ;
+            end ;
+        end ;
+    end ;
+
+    Result := nouvelleChaine ;
+end ;
 
 end.

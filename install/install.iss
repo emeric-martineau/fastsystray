@@ -1,6 +1,6 @@
 [Setup]
 AppName=Fast SysTray
-AppVerName=Fast SysTray 1.1.3
+AppVerName=Fast SysTray 1.1.4
 DefaultDirName={pf}\FastSysTray
 DefaultGroupName=Fast SysTray
 UninstallDisplayIcon={uninstallexe}
@@ -10,7 +10,7 @@ WizardSmallImageFile=WizModernSmallImage-IS.bmp
 LanguageDetectionMethod=none
 
 [Languages]
-Name: "fr"; MessagesFile: "compiler:French.isl"; InfoBeforeFile: "texte_avant_installation.txt"; InfoAfterFile: "texte_apres_installation.txt";
+Name: "fr"; MessagesFile: "compiler:Languages\French.isl"; InfoBeforeFile: "texte_avant_installation.txt"; InfoAfterFile: "texte_apres_installation.txt";
 
 [Types]
 ; Type d'installation

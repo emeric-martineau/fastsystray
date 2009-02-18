@@ -1,0 +1,23 @@
+Quelques idées...
+
+    RACCOURCI
+    - voir comment virer la case à cocher "lecture seule" dans la boit de dialogue racourci
+
+    GENERAL :
+    - gestion du CallBak de sysTray version 5.0
+    - Tester avecf des droits verrouiller sur le registre
+    - Avant de créer le menu. S'il existe déjà, vidé toute les resources (menu et sous menu). Voir quand le menu disparait.
+      A prioris NewPopUpMenu1.Free ; ne libère pas vraiment toute la mémoire
+    - Outils pour convertir le menu Démarrer, le bureau et Quick Lauch en menu
+    - Multi langue
+    - pouvoir personnaliser les couleurs du menu ;
+
+    FAVORIS :
+    - Menu Favoris Internet (lecture-des-favoris-IE.html)
+    - Menu Favoris Réseau
+
+    EJECTER
+    - pouvoir ejecter tous les unités qui le supporte (mais rentrer que pour les CD)
+      (ejection-cd-et-savoir-si-le-lecteur-peut-etre-ejecte.html)
+
+        

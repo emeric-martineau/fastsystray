@@ -9,23 +9,28 @@ uses
 type
   TCreerRaccourci = class(TForm)
     Label1: TLabel;
-    parcourir: TButton;
+    parcourirFichier: TButton;
     programme: TEdit;
     Label2: TLabel;
     texte: TEdit;
     ok: TButton;
     Annuler: TButton;
-    OpenDialog1: TOpenDialog;
+    OpenDialogFichier: TOpenDialog;
     Label3: TLabel;
     arguments: TEdit;
     IsReperoire: TCheckBox;
+    Label4: TLabel;
+    icone: TEdit;
+    parcourirIcone: TButton;
+    OpenDialogIcone: TOpenDialog;
     procedure AnnulerClick(Sender: TObject);
-    procedure parcourirClick(Sender: TObject);
+    procedure parcourirFichierClick(Sender: TObject);
     procedure VerificationZoneTexte(Sender: TObject);
     procedure okClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure IsReperoireClick(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure parcourirIconeClick(Sender: TObject);
   private
     { Déclarations privées}
     function VerifierRaccourci() : boolean ;
@@ -56,7 +61,7 @@ end;
 {*******************************************************************************
  * On a cliqué sur le bouton parcourir
  ******************************************************************************}
-procedure TCreerRaccourci.parcourirClick(Sender: TObject);
+procedure TCreerRaccourci.parcourirFichierClick(Sender: TObject);
 Var S : String ;
     I  : IShellLink ;
     Ip : IPersistFile ;
@@ -85,21 +90,21 @@ begin
     end
     else
         { Affiche la boite de dialogue pour les commande }
-        if OpenDialog1.Execute
+        if OpenDialogFichier.Execute
         then begin
             { Mémorise le nom du fichier ou du lien }
-            lien := OpenDialog1.FileName ;
+            lien := OpenDialogFichier.FileName ;
 
             { Vérifie si c'est un lien }
-            if UpperCase(ExtractFileExt(OpenDialog1.FileName)) = '.LNK'
+            if UpperCase(ExtractFileExt(OpenDialogFichier.FileName)) = '.LNK'
             then begin
                 I := CreateComObject(CLSID_ShellLink)as IShellLink ;
                 Ip := I as IPersistFile ;
-                Ip.load(StringToOleStr(OpenDialog1.FileName), STGM_READ) ;
+                Ip.load(StringToOleStr(OpenDialogFichier.FileName), STGM_READ) ;
 
                 { Récupère le fichier }
                 I.GetPath(pc, max_path, w, SLGP_UNCPRIORITY) ;
-                OpenDialog1.FileName := pc ;
+                OpenDialogFichier.FileName := pc ;
 
                 { Récupère les arguments }
                 I.GetArguments(pc, max_path) ;
@@ -109,7 +114,7 @@ begin
                 argumentsString := '' ;
 
 
-            Programme.Text := OpenDialog1.FileName ;
+            Programme.Text := OpenDialogFichier.FileName ;
             Arguments.Text := argumentsString ;
 
             { Récupérer le label. NomFichier-Extention}
@@ -144,14 +149,18 @@ begin
             { Oui, on modifie les champs actuels }
             Form1.ListRacCmd.Strings[Form1.ListBoxRac.ItemIndex] := Programme.Text ;
             Form1.ListRacArg.Strings[Form1.ListBoxRac.ItemIndex] := Arguments.Text ;
+            Form1.ListRacIco.Strings[Form1.ListBoxRac.ItemIndex] := Icone.Text ;
             Form1.ListBoxRac.Items[Form1.ListBoxRac.ItemIndex] := Texte.Text ;
         end
         else begin
             { Non, on ajoute à la fin de la liste }
             Form1.ListRacCmd.Add(Programme.Text) ;
             Form1.ListRacArg.Add(Arguments.Text) ;
+            Form1.ListRacIco.Add(Icone.Text) ;
             Form1.ListBoxRac.Items.Add(Texte.Text) ;
         end ;
+
+        ModalResult := mrOK ;
 
         { Ferme la fenêtre }
         Close ;
@@ -167,8 +176,9 @@ begin
     if IsModify
     then begin
         Programme.Text := Form1.ListRacCmd.Strings[Form1.ListBoxRac.ItemIndex] ;
-        Arguments.Text := Form1.ListRacArg.Strings[Form1.ListBoxRac.ItemIndex] ;        
+        Arguments.Text := Form1.ListRacArg.Strings[Form1.ListBoxRac.ItemIndex] ;
         Texte.Text := Form1.ListBoxRac.Items[Form1.ListBoxRac.ItemIndex] ;
+        Icone.Text := Form1.ListRacIco.Strings[Form1.ListBoxRac.ItemIndex] ;
 
         Caption := 'Modification d''un raccourci' ;
         
@@ -211,12 +221,15 @@ end;
  * Vérifie l'existance du fichier
  ******************************************************************************}
 function TCreerRaccourci.VerifierRaccourci() : boolean ;
+Var prog : String ;
 begin
     Result := True ;
 
+    prog := Form1.ConvertirVariableDEnvironnement(Programme.Text) ;
+
     { Vérifie sir le fichier ou répertoire existe }
-    if not ((FileExists(Programme.Text) and not IsReperoire.Checked) or
-       (DirectoryExists(Programme.Text) and IsReperoire.Checked))
+    if not ((FileExists(prog) and not IsReperoire.Checked) or
+       (DirectoryExists(prog) and IsReperoire.Checked))
     then
         if Application.MessageBox('Le fichier ou répertoire indiqué est introuvable. Voulez-vous tout de même valider le raccourci ?', 'Avertissement', MB_YESNO + MB_ICONWARNING) = IDNO
         then
@@ -278,6 +291,14 @@ begin
   finally
     DragFinish(Msg.Drop);
   end;
+end;
+
+procedure TCreerRaccourci.parcourirIconeClick(Sender: TObject);
+begin
+    if OpenDialogIcone.Execute
+    then begin
+        icone.Text := OpenDialogIcone.FileName ;
+    end ;
 end;
 
 end.
